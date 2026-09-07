@@ -5,7 +5,11 @@
 
 // @description decompresses a file and gets back its content
 // @return Result<String *>
-Result zlib_decompress_file_and_collect(const char *file_path);
+Result zlib_decompress_and_collect(const char *file_path);
+
+// @description compresses a string and writes the result to file
+// @return Result<NULL>
+Result zlib_compress_and_save(StringView content, const char *file_path);
 
 #ifdef ZLIB_IMPLEMENTATION
 
@@ -13,10 +17,10 @@ Result zlib_decompress_file_and_collect(const char *file_path);
 
 #include <zlib.h>
 
-Result zlib_decompress_file_and_collect(const char *file_path) {
+Result zlib_decompress_and_collect(const char *file_path) {
     FILE *file = fopen(file_path, "rb");
     if (file == NULL) {
-        return result_error("failed to open file");
+        return result_error("zlib failed, cannot open file");
     }
 
     z_stream stream = {0};
@@ -109,6 +113,62 @@ Result zlib_decompress_file_and_collect(const char *file_path) {
     }
 
     return result_ok(content);
+}
+
+Result zlib_compress_and_save(StringView content, const char *file_path) {
+    FILE *file = fopen(file_path, "wb");
+    if (file == NULL) {
+        return result_error("zlib failed, cannot open file");
+    }
+
+    z_stream stream = {0};
+
+    int status = deflateInit(&stream, Z_BEST_COMPRESSION);
+    if (status != Z_OK) {
+        fclose(file);
+        return result_error("zlib failed to initialize");
+    }
+
+    unsigned char output_buffer[BUFFER_SIZE];
+
+    stream.next_in = (Bytef *)content.content;
+    stream.avail_in = (uInt)content.len;
+
+    do {
+        stream.next_out = output_buffer;
+        stream.avail_out = sizeof(output_buffer);
+
+        status = deflate(&stream, Z_FINISH);
+
+        size_t bytes_produced =
+            sizeof(output_buffer) - stream.avail_out;
+
+        if (bytes_produced > 0) {
+            size_t bytes_written = fwrite(
+                output_buffer,
+                1,
+                bytes_produced,
+                file
+            );
+
+            if (bytes_written != bytes_produced) {
+                deflateEnd(&stream);
+                fclose(file);
+                return result_error("zlib failed to write compressed data");
+            }
+        }
+    } while (status == Z_OK);
+
+    if (status != Z_STREAM_END) {
+        deflateEnd(&stream);
+        fclose(file);
+        return result_error("zlib failed to compress");
+    }
+
+    deflateEnd(&stream);
+    fclose(file);
+
+    return result_ok(NULL);
 }
 
 #endif // ZLIB_IMPLEMENTATION

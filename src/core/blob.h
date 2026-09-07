@@ -52,10 +52,12 @@ Result blob_parse(StringView sv) {
 
     StringView blob_size_sv = sv_until(sv, '\0');
     if(sv.len == blob_size_sv.len) {
+        fprintf(stderr, "nan2\n");
         return result_error("invalid blob format");
     }
 
     if(!sv_is_number(blob_size_sv)) {
+        fprintf(stderr, "nan\n");
         return result_error("invalid blob format");
     }
 

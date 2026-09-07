@@ -13,6 +13,8 @@ String *string_new();
 
 void string_push(String *self, const char *content, usize size);
 void string_push_cstr(String *self, char *cstr);
+void string_push_usize(String *self, usize size);
+void string_push_char(String *self, char c);
 
 // @description collect the string into a cstr
 char *string_collect(String *self);
@@ -62,10 +64,20 @@ void string_push(String *self, const char *content, usize size) {
     self->len += size;
 }
 
+void string_push_usize(String *self, usize size) {
+    char buffer[256] = {0};
+    sprintf(buffer, "%zu", size);
+    return string_push_cstr(self, buffer);
+}
 
 void string_push_cstr(String *self, char *cstr) {
     usize len = strlen(cstr);
     string_push(self, cstr, len);
+}
+
+void string_push_char(String *self, char c) {
+    char buffer[1] = {c};
+    string_push(self, buffer, 1);
 }
 
 char *string_collect(String *self) {

@@ -7,5 +7,4 @@
 typedef size_t usize;
 typedef int64_t i64;
 
-
 #endif

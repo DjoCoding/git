@@ -3,7 +3,13 @@
 
 CMakeFiles/git.dir/src/main.c.o
  /home/djocoding/dev/c/codecrafters-git-c/src/main.c
- /home/djocoding/dev/c/codecrafters-git-c/src/types.h
+ /home/djocoding/dev/c/codecrafters-git-c/src/lib/include.h
+ /home/djocoding/dev/c/codecrafters-git-c/src/core/blob.h
+ /home/djocoding/dev/c/codecrafters-git-c/src/lib/include.h
+ /home/djocoding/dev/c/codecrafters-git-c/src/lib/result.h
+ /home/djocoding/dev/c/codecrafters-git-c/src/lib/str.h
+ /home/djocoding/dev/c/codecrafters-git-c/src/lib/sv.h
+ /home/djocoding/dev/c/codecrafters-git-c/src/lib/types.h
  /usr/include/alloca.h
  /usr/include/asm-generic/errno-base.h
  /usr/include/asm-generic/errno.h

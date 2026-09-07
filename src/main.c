@@ -31,19 +31,25 @@ String *string_new() {
     return string;
 }
 
-void string_push(String *self, char *content, usize size) {
-    if((self->len + size) >= self->cap) {
-        usize cap = self->len + size;
-        
-        self->content = realloc(self->content, cap);
-        if(self->content == NULL) {
+void string_push(String *self, const char *content, usize size) {
+    usize required = self->len + size;
+
+    if (required > self->cap) {
+        usize new_cap = self->cap == 0 ? 64 : self->cap;
+
+        while (new_cap < required) {
+            new_cap *= 2;
+        }
+
+        void *new_content = realloc(self->content, new_cap);
+        if (new_content == NULL) {
             perror("realloc");
             exit(1);
         }
 
-        self->cap = cap;
+        self->content = new_content;
+        self->cap = new_cap;
     }
-
 
     memcpy(self->content + self->len, content, size);
     self->len += size;
@@ -161,7 +167,7 @@ StringView sv_until(StringView s, char c) {
 }
 
 #define sv_foreach(s, c) \
-    for(char *c = s.content; c < s.content + s.len; ++c)
+    for(char *c = s.content; c < (s.content + s.len); ++c)
 
 bool sv_is_number(StringView s) {
     bool valid = true;
@@ -183,6 +189,8 @@ i64 sv_to_i64(StringView s) {
         value += *c - '0';
     }
 
+    // fprintf(stdout, "string_view of value = %.*s, value = %zu\n", (int)s.len, s.content, value);
+
     return value;
 }
 
@@ -199,12 +207,14 @@ bool sv_starts_with(StringView self, StringView other) {
 
 // @return Result<Blob *>
 Result blob_parse(StringView sv) {
-    if(!sv_starts_with(sv, sv_from_cstr("blob "))) {
+    StringView blob_header = sv_from_cstr("blob ");
+
+    if(!sv_starts_with(sv, blob_header)) {
         return result_error("invalid blob header");
     }
 
     // getting "blob [[...sv...]]" 
-    sv = sv_slice(sv, sizeof("blob "), sv.len);
+    sv = sv_slice(sv, blob_header.len, sv.len);
 
     StringView blob_size_sv = sv_until(sv, '\0');
     if(sv.len == blob_size_sv.len) {
@@ -223,6 +233,7 @@ Result blob_parse(StringView sv) {
     usize size = (usize)size_i64;
 
     StringView blob_content = sv_slice(sv, blob_size_sv.len + 1, sv.len); // +1 to skip the \0
+
     // NOTE: not checking this and reading [char * size] blindly
     // if(blob_content.len != size) {
     //     return result_error("invalid blob content");
@@ -267,58 +278,99 @@ Result read_file_contents(const char *file_path) {
 
 // @return Result<String *>
 Result zlib_decompress_file_and_collect(const char *file_path) {
-    FILE *f = fopen(file_path, "rb");
-
-    if (f == NULL) {
+    FILE *file = fopen(file_path, "rb");
+    if (file == NULL) {
         return result_error("failed to open file");
     }
 
     z_stream stream = {0};
 
-    int ret = inflateInit2(&stream, MAX_WBITS);
-    if (ret != Z_OK) {
-        fclose(f);
-        return result_error("zlib failed (inflate init error)");
+    int status = inflateInit2(&stream, MAX_WBITS);
+    if (status != Z_OK) {
+        fclose(file);
+        return result_error("zlib failed to initialize");
     }
 
     String *content = string_new();
+    if (content == NULL) {
+        inflateEnd(&stream);
+        fclose(file);
+        return result_error("failed to allocate output string");
+    }
 
     unsigned char input_buffer[BUFFER_SIZE];
     unsigned char output_buffer[BUFFER_SIZE];
 
-    int status;
+    bool finished = false;
 
-    do {
-        stream.avail_in = fread(input_buffer, 1, BUFFER_SIZE, f);
-        stream.next_in = input_buffer;
+    while (!finished) {
+        size_t bytes_read = fread(
+            input_buffer,
+            1,
+            sizeof(input_buffer),
+            file
+        );
 
-        if (ferror(f)) {
+        if (ferror(file)) {
             inflateEnd(&stream);
-            fclose(f);
+            fclose(file);
             string_free(content);
-            return result_error("failed to read from file");
+            return result_error("failed to read file");
         }
 
-        do {
-            stream.avail_out = BUFFER_SIZE;
+        if (bytes_read == 0) {
+            break;
+        }
+
+        stream.next_in = input_buffer;
+        stream.avail_in = (uInt)bytes_read;
+
+        while (stream.avail_in > 0) {
             stream.next_out = output_buffer;
+            stream.avail_out = sizeof(output_buffer);
 
             status = inflate(&stream, Z_NO_FLUSH);
 
-            if (status != Z_OK && status != Z_STREAM_END) {
-                inflateEnd(&stream);
-                fclose(f);
-                string_free(content);
-                return result_error("zlib failed (inflate error)");
+            size_t bytes_produced =
+                sizeof(output_buffer) - stream.avail_out;
+
+            if (bytes_produced > 0) {
+                string_push(
+                    content,
+                    output_buffer,
+                    bytes_produced
+                );
             }
 
-            size_t bytes_produced = BUFFER_SIZE - stream.avail_out;
-            string_push(content, output_buffer, bytes_produced);
-        } while (stream.avail_out == 0);
-    } while (status != Z_STREAM_END);
+            if (status == Z_STREAM_END) {
+                finished = true;
+                break;
+            }
+
+            if (status != Z_OK) {
+                inflateEnd(&stream);
+                fclose(file);
+                string_free(content);
+                return result_error("zlib failed during decompression");
+            }
+
+            if (stream.avail_in == 0) {
+                break;
+            }
+
+            if (stream.avail_out != 0) {
+                break;
+            }
+        }
+    }
 
     inflateEnd(&stream);
-    fclose(f);
+    fclose(file);
+
+    if (!finished) {
+        string_free(content);
+        return result_error("truncated zlib stream");
+    }
 
     return result_ok(content);
 }

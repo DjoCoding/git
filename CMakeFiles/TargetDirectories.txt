@@ -1,0 +1,3 @@
+/home/djocoding/dev/c/codecrafters-git-c/CMakeFiles/git.dir
+/home/djocoding/dev/c/codecrafters-git-c/CMakeFiles/edit_cache.dir
+/home/djocoding/dev/c/codecrafters-git-c/CMakeFiles/rebuild_cache.dir

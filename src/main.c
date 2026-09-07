@@ -3,6 +3,326 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <errno.h>
+#include <stdbool.h>
+#include <assert.h>
+#include <ctype.h>
+#include <stdint.h>
+#include <zlib.h>
+#include "types.h"
+
+
+typedef struct {
+    char *content;
+    usize len;
+    usize cap;
+} String;
+
+String *string_new() {
+    String *string = malloc(sizeof(*string));
+    if(string == NULL) {
+        perror("malloc");
+        exit(1);
+    }
+
+    string->content = NULL;
+    string->len = 0;
+    string->cap = 0;
+
+    return string;
+}
+
+void string_push(String *self, char *content, usize size) {
+    if((self->len + size) >= self->cap) {
+        usize cap = self->len + size;
+        
+        self->content = realloc(self->content, cap);
+        if(self->content == NULL) {
+            perror("realloc");
+            exit(1);
+        }
+
+        self->cap = cap;
+    }
+
+
+    memcpy(self->content + self->len, content, size);
+    self->len += size;
+}
+
+void string_push_cstr(String *self, char *cstr) {
+    usize len = strlen(cstr);
+    string_push(self, cstr, len);
+}
+
+
+char *string_collect(String *self) {
+    char *content = malloc(self->len + 1);
+    if(content == NULL) {
+        perror("malloc");
+        exit(1);
+    }
+
+    memcpy(content, self->content, self->len);
+    content[self->len] = 0;
+
+    return content;
+}
+
+void string_free(String *self) {
+    free(self->content);
+    free(self);
+}
+
+typedef struct {
+    usize len;
+    char *content;
+} Blob;
+
+// Blob own its content 
+Blob *blob_new(usize len, char *content) {
+    Blob *blob = malloc(sizeof(*blob));
+    if(blob == NULL) {
+        perror("malloc");
+        exit(1);
+    }
+
+    blob->len = len;
+    blob->content = malloc(len);
+    if(blob->content == NULL) {
+        perror("malloc");
+        exit(1);
+    }
+    memcpy(blob->content, content, len);
+
+    return blob;
+}
+
+void blob_free(Blob *self) {
+    free(self->content);
+    free(self);
+}
+
+typedef struct{
+    bool ok;
+    union {
+        const char *error;
+        void *data;
+    } as;
+} Result;
+
+Result result_ok(void *data) {
+    return (Result) {
+        .ok = true,
+        .as.data = data
+    };
+}
+
+Result result_error(const char *error) {
+    return (Result) {
+        .ok = false,
+        .as.error = error
+    };
+}
+
+
+typedef struct {
+    char *content;
+    usize len;
+} StringView;
+
+StringView sv_init(char *content, usize len) {
+    return (StringView) {
+        .content = content,
+        .len = len
+    };
+}
+
+StringView sv_from_cstr(char *cstr) {
+    usize len = strlen(cstr);
+    return sv_init(cstr, len);
+}
+
+StringView sv_from_string(String *string) {
+    return sv_init(string->content, string->len);
+}
+
+// from is included, to is not.
+StringView sv_slice(StringView s, usize from, usize to) {
+    assert(from < s.len);
+    assert(to <= s.len);
+    return sv_init(s.content + from, to - from);
+}
+
+StringView sv_until(StringView s, char c) {
+    for(usize i = 0; i < s.len; ++i) {
+        if(s.content[i] == c) return sv_slice(s, 0, i);
+    }
+    return s;
+}
+
+#define sv_foreach(s, c) \
+    for(char *c = s.content; c < s.content + s.len; ++c)
+
+bool sv_is_number(StringView s) {
+    bool valid = true;
+    sv_foreach(s, c) {
+        if(!isalnum(*c) || isalpha(*c)) {
+            valid = false;
+            break;
+        }
+    }
+    return valid;
+}
+
+i64 sv_to_i64(StringView s) {
+    assert(sv_is_number(s));
+
+    i64 value = 0;
+    sv_foreach(s, c) {
+        value *= 10;
+        value += *c - '0';
+    }
+
+    return value;
+}
+
+bool sv_eq(StringView self, StringView other) {
+    if(self.len != other.len) return false;
+    return memcmp(self.content, other.content, self.len) == 0;
+}
+
+bool sv_starts_with(StringView self, StringView other) {
+    if(self.len < other.len) return false;
+    StringView slice = sv_slice(self, 0, other.len);
+    return sv_eq(slice, other);
+}
+
+// @return Result<Blob *>
+Result blob_parse(StringView sv) {
+    if(!sv_starts_with(sv, sv_from_cstr("blob "))) {
+        return result_error("invalid blob header");
+    }
+
+    // getting "blob [[...sv...]]" 
+    sv = sv_slice(sv, sizeof("blob "), sv.len);
+
+    StringView blob_size_sv = sv_until(sv, '\0');
+    if(sv.len == blob_size_sv.len) {
+        return result_error("invalid blob format");
+    }
+
+    if(!sv_is_number(blob_size_sv)) {
+        return result_error("invalid blob format");
+    }
+
+    i64 size_i64 = sv_to_i64(blob_size_sv);
+    if(size_i64 < 0) {
+        return result_error("invalid blob content size");
+    }
+
+    usize size = (usize)size_i64;
+
+    StringView blob_content = sv_slice(sv, blob_size_sv.len + 1, sv.len); // +1 to skip the \0
+    // NOTE: not checking this and reading [char * size] blindly
+    // if(blob_content.len != size) {
+    //     return result_error("invalid blob content");
+    // }
+
+    return result_ok(blob_new(size, blob_content.content));
+}
+
+// @return Result<char *>
+Result read_file_contents(const char *file_path) {
+    FILE *f = fopen(file_path, "r");
+    if(f == NULL) {
+        return result_error("failed to open file");
+    }
+
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+
+    char *content = malloc(size + 1);
+    if(content == NULL) {
+        fclose(f);
+        return result_error("failed to allocate buffer");
+    }
+    content[size] = 0;
+
+    size_t n = fread(content, size, 1, f);
+    if(n != 1) {
+        fclose(f);
+        free(content);
+        return result_error("failed to read file");
+    }
+
+    fclose(f);
+    return result_ok(content);
+}
+
+
+
+#define BUFFER_SIZE 16384
+
+// @return Result<String *>
+Result zlib_decompress_file_and_collect(const char *file_path) {
+    FILE *f = fopen(file_path, "rb");
+
+    if (f == NULL) {
+        return result_error("failed to open file");
+    }
+
+    z_stream stream = {0};
+
+    int ret = inflateInit2(&stream, MAX_WBITS);
+    if (ret != Z_OK) {
+        fclose(f);
+        return result_error("zlib failed (inflate init error)");
+    }
+
+    String *content = string_new();
+
+    unsigned char input_buffer[BUFFER_SIZE];
+    unsigned char output_buffer[BUFFER_SIZE];
+
+    int status;
+
+    do {
+        stream.avail_in = fread(input_buffer, 1, BUFFER_SIZE, f);
+        stream.next_in = input_buffer;
+
+        if (ferror(f)) {
+            inflateEnd(&stream);
+            fclose(f);
+            string_free(content);
+            return result_error("failed to read from file");
+        }
+
+        do {
+            stream.avail_out = BUFFER_SIZE;
+            stream.next_out = output_buffer;
+
+            status = inflate(&stream, Z_NO_FLUSH);
+
+            if (status != Z_OK && status != Z_STREAM_END) {
+                inflateEnd(&stream);
+                fclose(f);
+                string_free(content);
+                return result_error("zlib failed (inflate error)");
+            }
+
+            size_t bytes_produced = BUFFER_SIZE - stream.avail_out;
+            string_push(content, output_buffer, bytes_produced);
+        } while (stream.avail_out == 0);
+    } while (status != Z_STREAM_END);
+
+    inflateEnd(&stream);
+    fclose(f);
+
+    return result_ok(content);
+}
+
 
 int main(int argc, char *argv[]) {
     // Disable output buffering
@@ -38,6 +358,72 @@ int main(int argc, char *argv[]) {
         fclose(headFile);
         
         printf("Initialized git directory\n");
+
+    } else if (strcmp(command, "cat-file") == 0) {
+        if (argc < 3) {
+            fprintf(stderr, "Expected -p flag to specify the blob hash\n");
+            return 1;
+        }
+        
+        char *flag = argv[2];
+        if(strcmp(flag, "-p") != 0) {
+            fprintf(stderr, "Expected -p flag but found %s\n", flag);
+            return 1;
+        } 
+
+
+        if(argc < 4) {
+            fprintf(stderr, "Expected blob hash but found end\n");
+            return 1;
+        }
+
+        char *hash = argv[3];
+        usize hash_len = strlen(hash);
+        if(hash_len < 2) {
+            fprintf(stderr, "Invalid blob hash\n");
+            return 1;
+        }
+
+        String *buffer = string_new();
+        string_push_cstr(buffer, ".git/objects/");
+        string_push(buffer, hash, 2);
+        string_push_cstr(buffer, "/");
+        string_push(buffer, hash + 2, hash_len - 2);
+        
+        char *path = string_collect(buffer);
+        string_free(buffer);
+
+        Result decomp_result = zlib_decompress_file_and_collect(path);
+        if(!decomp_result.ok) {
+            free(path);
+
+            const char *error = decomp_result.as.error;
+            fprintf(stderr, "ERROR: %s\n", error);
+
+            return 1;
+        }
+
+        String *string = decomp_result.as.data;
+
+        Result blob_result = blob_parse(sv_from_string(string));
+        if(!blob_result.ok) {
+            free(path);
+            string_free(string);
+            
+            const char *error = blob_result.as.error;
+            fprintf(stderr, "ERROR: %s\n", error);
+            
+            return 1;
+        }
+
+
+        string_free(string);
+        free(path);
+
+        Blob *blob = blob_result.as.data;
+        fprintf(stdout, "%.*s", (int)blob->len, blob->content); 
+
+        blob_free(blob);
     } else {
         fprintf(stderr, "Unknown command %s\n", command);
         return 1;

@@ -4,16 +4,29 @@
 #include <openssl/evp.h>
 #include "types.h"
 
-#define HASH_SIZE EVP_MAX_MD_SIZE 
-typedef unsigned char Hash[HASH_SIZE];
+#define HASH_BYTES_SIZE 32
+#define HASH_TEXT_SIZE EVP_MAX_MD_SIZE 
+typedef unsigned char Hash[HASH_BYTES_SIZE];
 
 // @description implementation of SHA-256 using openssl/evp
 // @return returns the size of the hash buffer
 usize hash(StringView sv, char *buffer);
 
+// @description get the representation of the hash as hex
+// @return returns the size of the hash buffer
+usize hash_dump_to_buffer(Hash h, char *buffer);
+
 #ifdef HASH_IMPLEMENTATION_
 
 #include <string.h>
+
+usize hash_dump_to_buffer(Hash h, char *buffer) {
+    usize n = 0;
+    for(usize i = 0; i < HASH_BYTES_SIZE; i++) {
+        n += sprintf(buffer + n, "%02x", h[i]);
+    }
+    return n;
+}
 
 usize hash(StringView sv, char *buffer) {
     Hash h = {0};
@@ -28,12 +41,7 @@ usize hash(StringView sv, char *buffer) {
 
     EVP_MD_CTX_free(context);
 
-    usize n = 0;
-    for(usize i = 0; i < 32; i++) {
-        n += sprintf(buffer + n, "%02x", h[i]);
-    }
-
-    return n;
+    return hash_dump_to_buffer(h, buffer);
 }
 
 #endif

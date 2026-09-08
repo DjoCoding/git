@@ -14,6 +14,9 @@
 #define BLOB_IMPLEMENTATION_
 #include "core/blob.h"
 
+#define TREE_IMPLEMENTATION_
+#include "core/tree.h"
+
 #define ZLIB_IMPLEMENTATION
 #include "core/zlib.h"
 
@@ -120,6 +123,8 @@ int main(int argc, char *argv[]) {
 
     const char *command = args_consume(&args);
 
+    StringBuilder *sb = sb_new();
+
     if (strcmp(command, "init") == 0) {
         // TODO: Uncomment the code below to pass the first stage
         
@@ -127,25 +132,131 @@ int main(int argc, char *argv[]) {
             mkdir(GIT_OBJECTS_DIR, 0755) == -1 || 
             mkdir(GIT_REFS_DIR, 0755) == -1) {
             fprintf(stderr, "Failed to create directories: %s\n", strerror(errno));
-            return 1;
+            goto cleanup_and_error;
         }
         
         FILE *headFile = fopen(GIT_HEAD_FILE, "w");
         if (headFile == NULL) {
             fprintf(stderr, "Failed to create %s file: %s\n", GIT_HEAD_FILE, strerror(errno));
-            return 1;
+            goto cleanup_and_error;
         }
         fprintf(headFile, "ref: refs/heads/main\n");
         fclose(headFile);
         
         fprintf(stdout, "Initialized git directory\n");
     } else if (strcmp(command, "ls-tree") == 0) {
+        if(args_end(args)) {
+            usage(stderr, prog_name, "expected tree hash");
+            goto cleanup_and_error;
+        }
 
+        bool name_only   = false;
+        bool object_only = false;
+        char *tree_hash  = NULL;
 
+        while(!args_end(args)) {
+            char *arg = args_consume(&args);
+            StringView arg_sv = sv_from_cstr(arg);
+
+            if(sv_starts_with(arg_sv, sv_from_cstr("--"))) {
+                if(sv_eq(arg_sv, sv_from_cstr("--name-only"))) {
+                    name_only = true;
+                    continue;
+                }
+
+                if(sv_eq(arg_sv, sv_from_cstr("--object-only"))) {
+                    object_only = true; 
+                    continue;
+                }
+
+                fprintf(stderr, "ERROR: invalid flag %s\n", arg);
+                goto cleanup_and_error;
+            } 
+
+            if(tree_hash != NULL) {
+                fprintf(stderr, "ERROR: tree hash already specified %s\n", tree_hash);
+                goto cleanup_and_error;
+            }
+            
+            tree_hash = arg;
+        }
+
+        if(tree_hash == NULL) {
+            fprintf(stderr, "ERROR: expected tree hash\n");
+            goto cleanup_and_error;
+        }
+
+        usize tree_hash_len = strlen(tree_hash);
+
+        if(tree_hash_len != HASH_TEXT_SIZE) {
+            fprintf(stderr, "ERROR: invalid tree hash\n");
+            goto cleanup_and_error;
+        }
+
+        // sb_clear(sb);
+        // sb_push_cstr(sb, GIT_OBJECTS_DIR);
+        // sb_push_cstr(sb, "/");
+        // sb_push(sb, tree_hash, 2);
+        // sb_push_cstr(sb, "/");
+        // sb_push(sb, tree_hash + 2, tree_hash_len - 2);
+        // char *tree_object_path = sb_collect(sb);
+
+        sb_clear(sb);
+        sb_push_cstr(sb, tree_hash);
+        char *tree_object_path = sb_collect(sb);
+
+        Result decomp_result = zlib_decompress(tree_object_path, sb);
+        if(!decomp_result.ok) {
+            free(tree_object_path);
+
+            const char *error = decomp_result.as.error;
+            fprintf(stderr, "ERROR: %s\n", error);
+
+            goto cleanup_and_error;
+        }
+        free(tree_object_path);
+
+        usize tree_object_content_size = sb_len(sb);
+        char *tree_object_content = sb_collect(sb);
+
+        StringView tree_object_content_sv = sv_init(tree_object_content, tree_object_content_size);
+        
+        Result result = tree_parse(tree_object_content_sv);
+        if(!result.ok) {
+            free(tree_object_content);
+
+            const char *error = result.as.error;
+            fprintf(stderr, "ERROR: %s\n", error);
+
+            goto cleanup_and_error;
+        }
+        free(tree_object_content);
+
+        Tree *tree = (Tree *)result.as.data;
+
+        char buffer[HASH_TEXT_SIZE] = {0};
+        tree_foreach(tree, p) {
+            TreeEntry e = *p;
+            if(name_only) {
+                fprintf(stdout, "%s\n", e.file_name);
+                continue;
+            }
+            
+            usize n = hash_dump_to_buffer(e.hash, buffer);
+
+            if(object_only) {
+                fprintf(stdout, "%.*s\n", (int)n, buffer);
+                continue;
+            }
+
+            fprintf(stdout, "%u %s %.*s\n", e.mode, e.file_name, (int)n, buffer);
+        }
+
+        tree_free(tree);
     } else if (strcmp(command, "hash-file") == 0) {
         if(args_end(args)) {
             usage(stderr, prog_name, "expected file path");
-            return 1;
+            goto cleanup_and_error;
         }
         
         char *file_path = args_consume(&args);
@@ -153,23 +264,22 @@ int main(int argc, char *argv[]) {
         Result read_file_result = read_file_contents(file_path);
         if(!read_file_result.ok) {
             fprintf(stderr, "ERROR: %s\n", read_file_result.as.error);
-            return 1;
+            goto cleanup_and_error;
         }
 
         char *file_contents = read_file_result.as.data;
         usize file_contents_len = strlen(file_contents);
 
-        String *blob_content_str = string_new();
-        string_push_cstr(blob_content_str, "blob ");
-        string_push_usize(blob_content_str, file_contents_len);
-        string_push_char(blob_content_str, '\0');
-        string_push_cstr(blob_content_str, file_contents);
-        
-        free(file_contents);
+        sb_clear(sb);
+        sb_push_cstr(sb, "blob ");
+        sb_push_usize(sb, file_contents_len);
+        sb_push_char(sb, '\0');
+        sb_push_cstr(sb, file_contents);
 
-        char *blob_content = string_collect(blob_content_str);
-        usize blob_content_size = blob_content_str->len;
-        string_free(blob_content_str);
+        usize blob_content_size = sb_len(sb);
+        char *blob_content = sb_collect(sb);
+
+        free(file_contents);
         
         // working with the sv_init because sv_from_cstr will stop at the \0 of the blob format
         StringView blob_content_sv = sv_init(blob_content, blob_content_size);
@@ -177,36 +287,32 @@ int main(int argc, char *argv[]) {
         char hash_buffer[256] = {0};
         usize hash_buffer_size = hash(blob_content_sv, hash_buffer);
 
-        String *output_dir_path_buffer = string_new();
-        string_push_cstr(output_dir_path_buffer, GIT_OBJECTS_DIR);
-        string_push_cstr(output_dir_path_buffer, "/");
-        string_push(output_dir_path_buffer, hash_buffer, 2); // take the first 2 chars of the hash
-
-        char *output_dir_path = string_collect(output_dir_path_buffer);
+        sb_clear(sb);
+        sb_push_cstr(sb, GIT_OBJECTS_DIR);
+        sb_push_cstr(sb, "/");
+        sb_push(sb, hash_buffer, 2); // take the first 2 chars of the hash
+        char *output_dir_path = sb_collect(sb);
 
         Result mkdir_result = mkdir_p(output_dir_path, 0755);
         if(!mkdir_result.ok) {
             free(output_dir_path);
             free(blob_content);
             fprintf(stderr, "ERROR: %s\n", mkdir_result.as.error);
-            return 1;
+            goto cleanup_and_error;
         }
         
-        free(output_dir_path); // free the collected string
-
-        String *output_file_path_buffer = output_dir_path_buffer;
-        string_push_cstr(output_file_path_buffer, "/");
-        string_push(output_file_path_buffer, &hash_buffer[2], hash_buffer_size - 2);
-
-        char *output_file_path = string_collect(output_file_path_buffer);
-        string_free(output_file_path_buffer);
+        sb_clear(sb);
+        sb_push_cstr(sb, output_dir_path); free(output_dir_path); 
+        sb_push_cstr(sb, "/");
+        sb_push(sb, &hash_buffer[2], hash_buffer_size - 2);
+        char *output_file_path = sb_collect(sb);
 
         Result compress_result = zlib_compress_and_save(blob_content_sv, output_file_path);
         if(!compress_result.ok) {
             free(output_file_path);
             free(blob_content);
             fprintf(stderr, "ERROR: %s\n", compress_result.as.error);
-            return 1;
+            goto cleanup_and_error;
         }
 
         fprintf(stdout, "%s\n", hash_buffer);
@@ -218,62 +324,60 @@ int main(int argc, char *argv[]) {
     } else if (strcmp(command, "cat-file") == 0) {
         if(args_end(args)) {
             usage(stderr, prog_name, "expected -p flag to specify the blob hash");
-            return 1;
+            goto cleanup_and_error;
         }
         
         char *flag = args_consume(&args);
         if(strcmp(flag, "-p") != 0) {
             fprintf(stderr, "Expected -p flag but found %s\n", flag);
-            return 1;
+            goto cleanup_and_error;
         } 
 
         if(args_end(args)) {
             usage(stderr, prog_name, "expected blob hash");
-            return 1;
+            goto cleanup_and_error;
         }
 
-        char *hash = args_consume(&args);
-        usize hash_len = strlen(hash);
-        if(hash_len < 2) {
-            fprintf(stderr, "Invalid blob hash\n");
-            return 1;
+        char *object_hash = args_consume(&args);
+        usize object_hash_len = strlen(object_hash);
+        if(object_hash_len < 2) {
+            fprintf(stderr, "ERROR: invalid object hash");
+            goto cleanup_and_error;
         }
 
-        String *buffer = string_new();
-        string_push_cstr(buffer, GIT_OBJECTS_DIR);
-        string_push_cstr(buffer, "/");
-        string_push(buffer, hash, 2);
-        string_push_cstr(buffer, "/");
-        string_push(buffer, hash + 2, hash_len - 2);
-        
-        char *path = string_collect(buffer);
-        string_free(buffer);
+        sb_clear(sb);
+        sb_push_cstr(sb, GIT_OBJECTS_DIR);
+        sb_push_cstr(sb, "/");
+        sb_push(sb, object_hash, 2);
+        sb_push_cstr(sb, "/");
+        sb_push(sb, object_hash + 2, object_hash_len - 2);
+        char *path = sb_collect(sb);
 
-        Result decomp_result = zlib_decompress_and_collect(path);
+        Result decomp_result = zlib_decompress(path, sb);
         if(!decomp_result.ok) {
             free(path);
 
             const char *error = decomp_result.as.error;
             fprintf(stderr, "ERROR: %s\n", error);
 
-            return 1;
+            goto cleanup_and_error;
         }
 
-        String *string = decomp_result.as.data;
+        usize content_len = sb_len(sb);
+        char *content = sb_collect(sb);
 
-        Result blob_result = blob_parse(sv_from_string(string));
+        Result blob_result = blob_parse(sv_init(content, content_len));
         if(!blob_result.ok) {
             free(path);
-            string_free(string);
+            free(content);
             
             const char *error = blob_result.as.error;
             fprintf(stderr, "ERROR: %s\n", error);
             
-            return 1;
+            goto cleanup_and_error;
         }
 
-
-        string_free(string);
+        free(content);
         free(path);
 
         Blob *blob = blob_result.as.data;
@@ -282,8 +386,15 @@ int main(int argc, char *argv[]) {
         blob_free(blob);
     } else {
         fprintf(stderr, "Unknown command %s\n", command);
-        return 1;
+        goto cleanup_and_error;
     }
-    
+
     return 0;
+
+cleanup_and_error:
+    sb_free(sb);
+    goto _error;
+
+_error:
+    return 1;
 }

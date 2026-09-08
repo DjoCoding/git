@@ -3,9 +3,10 @@
 
 #include "../lib/include.h"
 
-// @description decompresses a file and gets back its content
-// @return Result<String *>
-Result zlib_decompress_and_collect(const char *file_path);
+// @description decompresses a file and gets back its content in sb
+//              the caller is responsible of collecting the string
+// @return Result<NULL>
+Result zlib_decompress(const char *file_path, StringBuilder *sb);
 
 // @description compresses a string and writes the result to file
 // @return Result<NULL>
@@ -17,7 +18,9 @@ Result zlib_compress_and_save(StringView content, const char *file_path);
 
 #include <zlib.h>
 
-Result zlib_decompress_and_collect(const char *file_path) {
+Result zlib_decompress(const char *file_path, StringBuilder *sb) {
+    sb_clear(sb);
+    
     FILE *file = fopen(file_path, "rb");
     if (file == NULL) {
         return result_error("zlib failed, cannot open file");
@@ -29,13 +32,6 @@ Result zlib_decompress_and_collect(const char *file_path) {
     if (status != Z_OK) {
         fclose(file);
         return result_error("zlib failed to initialize");
-    }
-
-    String *content = string_new();
-    if (content == NULL) {
-        inflateEnd(&stream);
-        fclose(file);
-        return result_error("failed to allocate output string");
     }
 
     unsigned char input_buffer[BUFFER_SIZE];
@@ -54,7 +50,6 @@ Result zlib_decompress_and_collect(const char *file_path) {
         if (ferror(file)) {
             inflateEnd(&stream);
             fclose(file);
-            string_free(content);
             return result_error("failed to read file");
         }
 
@@ -75,8 +70,8 @@ Result zlib_decompress_and_collect(const char *file_path) {
                 sizeof(output_buffer) - stream.avail_out;
 
             if (bytes_produced > 0) {
-                string_push(
-                    content,
+                sb_push(
+                    sb,
                     (const char *)output_buffer,
                     bytes_produced
                 );
@@ -90,7 +85,6 @@ Result zlib_decompress_and_collect(const char *file_path) {
             if (status != Z_OK) {
                 inflateEnd(&stream);
                 fclose(file);
-                string_free(content);
                 return result_error("zlib failed during decompression");
             }
 
@@ -108,11 +102,10 @@ Result zlib_decompress_and_collect(const char *file_path) {
     fclose(file);
 
     if (!finished) {
-        string_free(content);
         return result_error("truncated zlib stream");
     }
 
-    return result_ok(content);
+    return result_ok(NULL);
 }
 
 Result zlib_compress_and_save(StringView content, const char *file_path) {

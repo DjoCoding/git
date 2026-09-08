@@ -7,40 +7,47 @@ typedef struct {
     char *content;
     usize len;
     usize cap;
-} String;
+} StringBuilder;
 
-String *string_new();
+#define Self StringBuilder
 
-void string_push(String *self, const char *content, usize size);
-void string_push_cstr(String *self, char *cstr);
-void string_push_usize(String *self, usize size);
-void string_push_char(String *self, char c);
+Self *sb_new();
 
-// @description collect the string into a cstr
-char *string_collect(String *self);
+void sb_push(Self *self, const char *content, usize size);
+void sb_push_cstr(Self *self, char *cstr);
+void sb_push_usize(Self *self, usize size);
+void sb_push_char(Self *self, char c);
 
-void string_free(String *self);
+// @description collect the string into a cstr and clear the data of the builder
+char *sb_collect(Self *self);
+
+// @description clear the content of the string builder
+void sb_clear(Self *self);
+
+usize sb_len(Self *self);
+
+void sb_free(Self *self);
 
 #ifdef STRING_IMPLEMENTATION_
 
 #include <stdlib.h>
 #include <string.h>
 
-String *string_new() {
-    String *string = (String *)malloc(sizeof(*string));
-    if(string == NULL) {
+Self *sb_new() {
+    Self *sb = (Self *)malloc(sizeof(*sb));
+    if(sb == NULL) {
         perror("malloc");
         exit(1);
     }
 
-    string->content = NULL;
-    string->len = 0;
-    string->cap = 0;
+    sb->content = NULL;
+    sb->len = 0;
+    sb->cap = 0;
 
-    return string;
+    return sb;
 }
 
-void string_push(String *self, const char *content, usize size) {
+void sb_push(Self *self, const char *content, usize size) {
     usize required = self->len + size;
 
     if (required > self->cap) {
@@ -64,23 +71,27 @@ void string_push(String *self, const char *content, usize size) {
     self->len += size;
 }
 
-void string_push_usize(String *self, usize size) {
+void sb_push_usize(Self *self, usize size) {
     char buffer[256] = {0};
     sprintf(buffer, "%zu", size);
-    return string_push_cstr(self, buffer);
+    return sb_push_cstr(self, buffer);
 }
 
-void string_push_cstr(String *self, char *cstr) {
+void sb_push_cstr(Self *self, char *cstr) {
     usize len = strlen(cstr);
-    string_push(self, cstr, len);
+    sb_push(self, cstr, len);
 }
 
-void string_push_char(String *self, char c) {
+void sb_push_char(Self *self, char c) {
     char buffer[1] = {c};
-    string_push(self, buffer, 1);
+    sb_push(self, buffer, 1);
 }
 
-char *string_collect(String *self) {
+usize sb_len(Self *self) {
+    return self->len;
+}
+
+char *sb_collect(Self *self) {
     char *content = (char *)malloc(self->len + 1);
     if(content == NULL) {
         perror("malloc");
@@ -90,14 +101,21 @@ char *string_collect(String *self) {
     memcpy(content, self->content, self->len);
     content[self->len] = 0;
 
+    sb_clear(self);
+    
     return content;
 }
 
-void string_free(String *self) {
+void sb_clear(Self *self) {
+    self->len = 0;
+}
+
+void sb_free(Self *self) {
     free(self->content);
     free(self);
 }
 
+#undef Self
 
 #endif // STRING_IMPLEMENTATION_
 

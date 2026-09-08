@@ -2,7 +2,7 @@
 #define STRING_VIEW_H_
 
 #include "types.h"
-#include "str.h"
+#include "sb.h"
 
 typedef struct {
     char *content;
@@ -11,7 +11,6 @@ typedef struct {
 
 StringView sv_init(char *content, usize len);
 StringView sv_from_cstr(char *cstr);
-StringView sv_from_string(String *string);
 
 // @note from is included, to is not.
 StringView sv_slice(StringView s, usize from, usize to);
@@ -19,6 +18,7 @@ StringView sv_until(StringView s, char c);
 
 bool sv_eq(StringView self, StringView other);
 bool sv_starts_with(StringView self, StringView other);
+bool sv_starts_with_char(StringView self, char c);
 bool sv_is_number(StringView s);
 
 i64 sv_to_i64(StringView s);
@@ -45,13 +45,9 @@ StringView sv_from_cstr(char *cstr) {
     return sv_init(cstr, len);
 }
 
-StringView sv_from_string(String *string) {
-    return sv_init(string->content, string->len);
-}
-
 // @note from is included, to is not.
 StringView sv_slice(StringView s, usize from, usize to) {
-    assert(from < s.len);
+    assert(from <= s.len);
     assert(to <= s.len);
     return sv_init(s.content + from, to - from);
 }
@@ -97,6 +93,11 @@ bool sv_starts_with(StringView self, StringView other) {
     if(self.len < other.len) return false;
     StringView slice = sv_slice(self, 0, other.len);
     return sv_eq(slice, other);
+}
+
+bool sv_starts_with_char(StringView self, char c) {
+    if(self.len < 1) return false;
+    return self.content[0] == c;
 }
 
 #endif // STRING_VIEW_IMPLEMENTATION_

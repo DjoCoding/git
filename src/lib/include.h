@@ -10,7 +10,7 @@
 #endif
 
 #include "result.h"
-#include "str.h"
+#include "sb.h"
 #include "sv.h"
 #include "types.h"
 #include "hash.h"

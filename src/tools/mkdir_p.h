@@ -35,8 +35,9 @@ Result mkdir_p(const char *path, mode_t mode)
         *p = '/';
     }
 
-    if (mkdir(buffer, mode) == -1 && errno != EEXIST)
+    if (mkdir(buffer, mode) == -1 && errno != EEXIST) {
         return result_error("mkdir -p failed");
+    }
 
 	return result_ok(NULL);
 }

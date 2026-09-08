@@ -20,10 +20,11 @@
 #define TOOLS_IMPLEMENTATION
 #include "tools/include.h"
 
-char *GIT_DIR = "mygit";
-char *GIT_OBJECTS_DIR = "mygit/objects";
-char *GIT_REFS_DIR = "mygit/refs";
-char *GIT_HEAD_FILE = "mygit/HEAD";
+#define GIT_DIR "mygit"
+
+char *GIT_OBJECTS_DIR = GIT_DIR "/objects";
+char *GIT_REFS_DIR = GIT_DIR ".git/refs";
+char *GIT_HEAD_FILE = GIT_DIR ".git/HEAD";
 
 // @descrption read file contents and gets back a C-string
 // @return Result<char *>
@@ -56,23 +57,70 @@ Result read_file_contents(const char *file_path) {
     return result_ok(content);
 }
 
+typedef struct {
+    char **values;
+    int count;
+} Args;
+
+Args args_init(int argc, char *argv[]) {
+    Args args = {
+        .count = argc,
+        .values = argv
+    };
+    return args;
+}
+
+
+bool args_end(Args self) {
+    return self.count == 0;
+}
+
+char *args_peek(Args self) {
+    assert(!args_end(self));
+    return self.values[0];
+}
+
+char *args_consume(Args *self) {
+    assert(!args_end(*self));
+    
+    char *arg = self->values[0];
+
+    self->count -= 1;
+    self->values += 1;
+
+    return arg;
+}
+
+void usage(FILE *f, char *prog_name, char *error) {
+    char buffer[1024] = {0};
+    usize n = 0;
+    
+    n += sprintf(buffer + n, "Usage: %s <command> [<args>]\n", prog_name);
+    if(error != NULL) {
+        n += sprintf(buffer + n, "ERROR: %s\n", error);
+    }
+   
+    fprintf(f, "%s", buffer);
+}
 
 int main(int argc, char *argv[]) {
     // Disable output buffering
     setbuf(stdout, NULL);
     setbuf(stderr, NULL);
 
-    if (argc < 2) {
-        fprintf(stderr, "Usage: ./your_program.sh <command> [<args>]\n");
+    Args args = args_init(argc, argv);
+    assert(!args_end(args));
+
+    char *prog_name = args_consume(&args);
+
+    if(args_end(args)) {
+        usage(stderr, prog_name, "expected command");
         return 1;
     }
-    
-    const char *command = argv[1];
-    
-    if (strcmp(command, "init") == 0) {
-        // You can use print statements as follows for debugging, they'll be visible when running tests.
-        fprintf(stderr, "Logs from your program will appear here!\n");
 
+    const char *command = args_consume(&args);
+
+    if (strcmp(command, "init") == 0) {
         // TODO: Uncomment the code below to pass the first stage
         
         if (mkdir(GIT_DIR, 0755) == -1 || 
@@ -90,16 +138,17 @@ int main(int argc, char *argv[]) {
         fprintf(headFile, "ref: refs/heads/main\n");
         fclose(headFile);
         
-        printf("Initialized git directory\n");
+        fprintf(stdout, "Initialized git directory\n");
+    } else if (strcmp(command, "ls-tree") == 0) {
+
 
     } else if (strcmp(command, "hash-file") == 0) {
-        if (argc < 3) {
-            fprintf(stderr, "Expected file path\n");
+        if(args_end(args)) {
+            usage(stderr, prog_name, "expected file path");
             return 1;
         }
         
-        char *file_path = argv[2];
-        fprintf(stdout, "file_path %s\n", file_path);
+        char *file_path = args_consume(&args);
     
         Result read_file_result = read_file_contents(file_path);
         if(!read_file_result.ok) {
@@ -109,8 +158,6 @@ int main(int argc, char *argv[]) {
 
         char *file_contents = read_file_result.as.data;
         usize file_contents_len = strlen(file_contents);
-
-        fprintf(stdout, "file contents %s\n", file_contents);
 
         String *blob_content_str = string_new();
         string_push_cstr(blob_content_str, "blob ");
@@ -127,13 +174,13 @@ int main(int argc, char *argv[]) {
         // working with the sv_init because sv_from_cstr will stop at the \0 of the blob format
         StringView blob_content_sv = sv_init(blob_content, blob_content_size);
 
-        char buffer[256] = {0};
-        usize buffer_size = hash(blob_content_sv, buffer);
+        char hash_buffer[256] = {0};
+        usize hash_buffer_size = hash(blob_content_sv, hash_buffer);
 
         String *output_dir_path_buffer = string_new();
         string_push_cstr(output_dir_path_buffer, GIT_OBJECTS_DIR);
         string_push_cstr(output_dir_path_buffer, "/");
-        string_push(output_dir_path_buffer, buffer, 2); // take the first 2 chars of the hash
+        string_push(output_dir_path_buffer, hash_buffer, 2); // take the first 2 chars of the hash
 
         char *output_dir_path = string_collect(output_dir_path_buffer);
 
@@ -145,12 +192,11 @@ int main(int argc, char *argv[]) {
             return 1;
         }
         
-        fprintf(stdout, "mkdir -p %s\n", output_dir_path);
         free(output_dir_path); // free the collected string
 
         String *output_file_path_buffer = output_dir_path_buffer;
         string_push_cstr(output_file_path_buffer, "/");
-        string_push(output_file_path_buffer, &buffer[2], buffer_size - 2);
+        string_push(output_file_path_buffer, &hash_buffer[2], hash_buffer_size - 2);
 
         char *output_file_path = string_collect(output_file_path_buffer);
         string_free(output_file_path_buffer);
@@ -163,31 +209,30 @@ int main(int argc, char *argv[]) {
             return 1;
         }
 
-        fprintf(stdout, "saved to file %s\n", output_file_path);
+        fprintf(stdout, "%s\n", hash_buffer);
 
         free(output_file_path);
         free(blob_content);
 
         return 0;
     } else if (strcmp(command, "cat-file") == 0) {
-        if (argc < 3) {
-            fprintf(stderr, "Expected -p flag to specify the blob hash\n");
+        if(args_end(args)) {
+            usage(stderr, prog_name, "expected -p flag to specify the blob hash");
             return 1;
         }
         
-        char *flag = argv[2];
+        char *flag = args_consume(&args);
         if(strcmp(flag, "-p") != 0) {
             fprintf(stderr, "Expected -p flag but found %s\n", flag);
             return 1;
         } 
 
-
-        if(argc < 4) {
-            fprintf(stderr, "Expected blob hash but found end\n");
+        if(args_end(args)) {
+            usage(stderr, prog_name, "expected blob hash");
             return 1;
         }
 
-        char *hash = argv[3];
+        char *hash = args_consume(&args);
         usize hash_len = strlen(hash);
         if(hash_len < 2) {
             fprintf(stderr, "Invalid blob hash\n");

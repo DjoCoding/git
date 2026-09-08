@@ -8,22 +8,32 @@ typedef struct {
     char *content;
 } Blob;
 
+#define Self Blob
+
 // @description construct a new blob (it allocates its content string)
-Blob *blob_new(usize len, char *content);
+Self *blob_new(usize len, char *content);
 
 // @return Result<Blob *>
 Result blob_parse(StringView sv);
 
-void blob_free(Blob *self);
+// @description format the blob to its string format
+void blob_format(Self *self, StringBuilder *sb);
+
+// @description get the hash of the blob inside buffer
+// @return returns size of the buffer
+usize blob_hash(Self *self, char *buffer);
+
+void blob_free(Self *self);
 
 #ifdef BLOB_IMPLEMENTATION_
+
 
 #include <stdlib.h>
 #include <string.h>
 
 // Blob own its content 
-Blob *blob_new(usize len, char *content) {
-    Blob *blob = (Blob *)malloc(sizeof(*blob));
+Self *blob_new(usize len, char *content) {
+    Self *blob = (Self *)malloc(sizeof(*blob));
     if(blob == NULL) {
         perror("malloc");
         exit(1);
@@ -78,10 +88,26 @@ Result blob_parse(StringView sv) {
     return result_ok(blob_new(size, blob_content.content));
 }
 
-void blob_free(Blob *self) {
+void blob_format(Self *self, StringBuilder *sb) {
+    sb_clear(sb);
+    sb_push_cstr(sb, "blob ");
+    sb_push_usize(sb, self->len);
+    sb_push_char(sb, '\0');
+    sb_push(sb, self->content, self->len);
+}
+
+usize blob_hash(Self *self, char *buffer) {
+    StringView blob_sv = sv_init(self->content, self->len);
+    usize size = hash(blob_sv, buffer);
+    return size;
+}
+
+void blob_free(Self *self) {
     free(self->content);
     free(self);
 }
+
+#undef Self
 
 #endif // BLOB_IMPLEMENTATION_
 

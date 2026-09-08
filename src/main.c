@@ -29,6 +29,35 @@ char *GIT_OBJECTS_DIR = GIT_DIR "/objects";
 char *GIT_REFS_DIR = GIT_DIR ".git/refs";
 char *GIT_HEAD_FILE = GIT_DIR ".git/HEAD";
 
+void object_dir_path_from_hash(char *hash_buffer, usize size, StringBuilder *sb) {
+    assert(size >= 2);
+
+    sb_clear(sb);
+    sb_push_cstr(sb, GIT_OBJECTS_DIR);
+    sb_push_cstr(sb, "/");
+    sb_push(sb, hash_buffer, 2); // take the first 2 chars of the hash
+}
+
+void object_path_from_hash(char *hash_buffer, usize size, StringBuilder *sb) {
+    sb_clear(sb);
+    sb_push_cstr(sb, GIT_OBJECTS_DIR);
+    sb_push_cstr(sb, "/");
+    sb_push(sb, hash_buffer, 2); // take the first 2 chars of the hash
+    sb_push_cstr(sb, "/");
+    sb_push(sb, &hash_buffer[2], size - 2); // take the first 2 chars of the hash
+}
+
+void tree_path_from_hash(char *hash_buffer, usize size, StringBuilder *sb) {
+    assert(size >= 2);
+
+    sb_clear(sb);
+    sb_push_cstr(sb, GIT_OBJECTS_DIR);
+    sb_push_cstr(sb, "/");
+    sb_push(sb, hash_buffer, 2);
+    sb_push_cstr(sb, "/");
+    sb_push(sb, hash_buffer + 2, size - 2);
+}
+
 // @descrption read file contents and gets back a C-string
 // @return Result<char *>
 Result read_file_contents(const char *file_path) {
@@ -144,12 +173,16 @@ int main(int argc, char *argv[]) {
         fclose(headFile);
         
         fprintf(stdout, "Initialized git directory\n");
-    } else if (strcmp(command, "ls-tree") == 0) {
+    } else if (strcmp(command, "write-tree") == 0) {
         if(args_end(args)) {
-            usage(stderr, prog_name, "expected tree hash");
+            usage(stderr, prog_name, "expected directory arg");
             goto cleanup_and_error;
         }
 
+        char *dir_path = args_consume(&args);
+
+
+    } else if (strcmp(command, "ls-tree") == 0) {
         bool name_only   = false;
         bool object_only = false;
         char *tree_hash  = NULL;
@@ -193,14 +226,10 @@ int main(int argc, char *argv[]) {
             goto cleanup_and_error;
         }
 
-        // sb_clear(sb);
-        // sb_push_cstr(sb, GIT_OBJECTS_DIR);
-        // sb_push_cstr(sb, "/");
-        // sb_push(sb, tree_hash, 2);
-        // sb_push_cstr(sb, "/");
-        // sb_push(sb, tree_hash + 2, tree_hash_len - 2);
+        // tree_path_from_hash(tree_hash, tree_hash_len, sb);
         // char *tree_object_path = sb_collect(sb);
 
+        // NOTE: Remove this and uncomment the previous one
         sb_clear(sb);
         sb_push_cstr(sb, tree_hash);
         char *tree_object_path = sb_collect(sb);
@@ -270,55 +299,45 @@ int main(int argc, char *argv[]) {
         char *file_contents = read_file_result.as.data;
         usize file_contents_len = strlen(file_contents);
 
-        sb_clear(sb);
-        sb_push_cstr(sb, "blob ");
-        sb_push_usize(sb, file_contents_len);
-        sb_push_char(sb, '\0');
-        sb_push_cstr(sb, file_contents);
-
-        usize blob_content_size = sb_len(sb);
-        char *blob_content = sb_collect(sb);
-
+        Blob *blob = blob_new(file_contents_len, file_contents);
         free(file_contents);
-        
-        // working with the sv_init because sv_from_cstr will stop at the \0 of the blob format
-        StringView blob_content_sv = sv_init(blob_content, blob_content_size);
 
         char hash_buffer[256] = {0};
-        usize hash_buffer_size = hash(blob_content_sv, hash_buffer);
+        usize hash_buffer_size = blob_hash(blob, hash_buffer);
 
-        sb_clear(sb);
-        sb_push_cstr(sb, GIT_OBJECTS_DIR);
-        sb_push_cstr(sb, "/");
-        sb_push(sb, hash_buffer, 2); // take the first 2 chars of the hash
+        object_dir_path_from_hash(hash_buffer, hash_buffer_size, sb);
         char *output_dir_path = sb_collect(sb);
 
         Result mkdir_result = mkdir_p(output_dir_path, 0755);
         if(!mkdir_result.ok) {
             free(output_dir_path);
-            free(blob_content);
             fprintf(stderr, "ERROR: %s\n", mkdir_result.as.error);
             goto cleanup_and_error;
         }
-        
-        sb_clear(sb);
-        sb_push_cstr(sb, output_dir_path); free(output_dir_path); 
-        sb_push_cstr(sb, "/");
-        sb_push(sb, &hash_buffer[2], hash_buffer_size - 2);
+        free(output_dir_path);
+
+        object_path_from_hash(hash_buffer, hash_buffer_size, sb);
         char *output_file_path = sb_collect(sb);
 
+        // format blob and free it
+        blob_format(blob, sb);
+        usize blob_content_size = sb_len(sb);
+        char *blob_content = sb_collect(sb);
+        blob_free(blob);
+
+        StringView blob_content_sv = sv_init(blob_content, blob_content_size);
         Result compress_result = zlib_compress_and_save(blob_content_sv, output_file_path);
         if(!compress_result.ok) {
-            free(output_file_path);
             free(blob_content);
+            free(output_file_path);
             fprintf(stderr, "ERROR: %s\n", compress_result.as.error);
             goto cleanup_and_error;
         }
 
         fprintf(stdout, "%s\n", hash_buffer);
 
-        free(output_file_path);
         free(blob_content);
+        free(output_file_path);
 
         return 0;
     } else if (strcmp(command, "cat-file") == 0) {
@@ -345,12 +364,7 @@ int main(int argc, char *argv[]) {
             goto cleanup_and_error;
         }
 
-        sb_clear(sb);
-        sb_push_cstr(sb, GIT_OBJECTS_DIR);
-        sb_push_cstr(sb, "/");
-        sb_push(sb, object_hash, 2);
-        sb_push_cstr(sb, "/");
-        sb_push(sb, object_hash + 2, object_hash_len - 2);
+        object_path_from_hash(object_hash, object_hash_len, sb);
         char *path = sb_collect(sb);
 
         Result decomp_result = zlib_decompress(path, sb);

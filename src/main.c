@@ -20,72 +20,14 @@
 #define TREE_IMPLEMENTATION_
 #include "core/tree.h"
 
+#define CORE_ACTIONS_IMPLEMENTATION
+#include "core/actions/include.h"
+
 #define GIT_DIR "mygit"
 
 char *GIT_OBJECTS_DIR = GIT_DIR "/objects";
 char *GIT_REFS_DIR = GIT_DIR ".git/refs";
 char *GIT_HEAD_FILE = GIT_DIR ".git/HEAD";
-
-void object_dir_path_from_hash(char *hash_buffer, usize size, StringBuilder *sb) {
-    assert(size >= 2);
-
-    sb_clear(sb);
-    sb_push_cstr(sb, GIT_OBJECTS_DIR);
-    sb_push_cstr(sb, "/");
-    sb_push(sb, hash_buffer, 2); // take the first 2 chars of the hash
-}
-
-void object_path_from_hash(char *hash_buffer, usize size, StringBuilder *sb) {
-    sb_clear(sb);
-    sb_push_cstr(sb, GIT_OBJECTS_DIR);
-    sb_push_cstr(sb, "/");
-    sb_push(sb, hash_buffer, 2); // take the first 2 chars of the hash
-    sb_push_cstr(sb, "/");
-    sb_push(sb, &hash_buffer[2], size - 2); // take the first 2 chars of the hash
-}
-
-void tree_path_from_hash(char *hash_buffer, usize size, StringBuilder *sb) {
-    assert(size >= 2);
-
-    sb_clear(sb);
-    sb_push_cstr(sb, GIT_OBJECTS_DIR);
-    sb_push_cstr(sb, "/");
-    sb_push(sb, hash_buffer, 2);
-    sb_push_cstr(sb, "/");
-    sb_push(sb, hash_buffer + 2, size - 2);
-}
-
-// @descrption read file contents and gets back a C-string
-// @return Result<char *>
-Result read_file_contents(const char *file_path) {
-    FILE *f = fopen(file_path, "r");
-    if(f == NULL) {
-        return result_error("failed to open file");
-    }
-
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-
-
-    char *content = malloc(size + 1);
-    if(content == NULL) {
-        fclose(f);
-        return result_error("failed to allocate buffer");
-    }
-    content[size] = 0;
-
-    size_t n = fread(content, size, 1, f);
-    if(n != 1) {
-        fclose(f);
-        free(content);
-        return result_error("failed to read file");
-    }
-
-    fclose(f);
-    return result_ok(content);
-}
-
 
 void usage(FILE *f, char *prog_name, char *error) {
     char buffer[1024] = {0};
@@ -99,11 +41,110 @@ void usage(FILE *f, char *prog_name, char *error) {
     fprintf(f, "%s", buffer);
 }
 
-void walker(DirEntry entry) {
-    fprintf(stdout, "%s\n", entry.path);
+typedef struct {
+    char *file_path;
+    StringBuilder *sb;
+    char *objects_dir_path;
+} HashFileContext;
+
+// @command hash-file
+// @example hash-file src/main.c
+int hash_file_command(HashFileContext context) {
+    assert(context.file_path != NULL);
+    assert(context.objects_dir_path != NULL);
+    assert(context.sb != NULL);
+
+    Result result = hash_file(context.file_path, context.objects_dir_path, context.sb);
+    if(!result.ok) {
+        const char *error = result.as.error;
+        fprintf(stderr, "ERROR: %s\n", error);
+        return 1;
+    }
+
+    char *hash = (char *)result.as.data;
+    fprintf(stdout, "%s\n", hash);
+
+    free(hash);
+    return 0;
+}
+
+typedef struct {
+    char *cstr_hash;
+    StringBuilder *sb;
+    char *objects_dir_path;
+} CatFileContext;
+
+// @command cat-file
+// @example cat-file -p <blob_hash>
+int cat_file_command(CatFileContext context) {
+    assert(context.cstr_hash != NULL);
+    assert(context.objects_dir_path != NULL);
+    assert(context.sb != NULL);
+
+    Result result = cat_file(context.cstr_hash, context.objects_dir_path, context.sb);
+    if(!result.ok) {
+        const char *error = result.as.error;
+        fprintf(stderr, "ERROR: %s\n", error);
+        return 1;
+    }
+
+    char *content = result.as.data;
+    fprintf(stdout, "%s\n", content);
+    free(content);
+
+    return 0;
+}
+
+typedef struct {
+    char *cstr_hash;
+    char *objects_dir_path;
+    StringBuilder *sb;
+    LsTreeOptions options;
+} LsTreeContext;
+
+// @command ls-tree
+// @example ls-tree <tree_hash>
+int ls_tree_command(LsTreeContext context) {
+    assert(context.cstr_hash != NULL);
+    assert(context.objects_dir_path != NULL);
+    assert(context.sb != NULL);
+
+    Result result = ls_tree(context.cstr_hash, context.objects_dir_path, context.sb);
+    if(!result.ok) {
+        const char *error = result.as.error;
+        fprintf(stderr, "ERROR: %s\n", error);
+        return 1;
+    }
+
+    Tree *tree = (Tree *)result.as.data;
+
+    LsTreeOptions options = context.options;
+    char buffer[1024] = {0};
+
+    tree_foreach(tree, p) {
+        TreeEntry e = *p;
+        if(options.name_only) {
+            fprintf(stdout, "%s\n", e.file_name);
+            continue;
+        }
+        
+        usize n = hash_dump_to_buffer(e.hash, buffer);
+
+        if(options.object_only) {
+            fprintf(stdout, "%.*s\n", (int)n, buffer);
+            continue;
+        }
+
+        fprintf(stdout, "%u %s %.*s\n", e.mode, e.file_name, (int)n, buffer);
+    }
+
+    tree_free(tree);
+    return 0;
 }
 
 int main(int argc, char *argv[]) {
+    int code = 0;
+
     // Disable output buffering
     setbuf(stdout, NULL);
     setbuf(stderr, NULL);
@@ -129,28 +170,40 @@ int main(int argc, char *argv[]) {
             mkdir(GIT_OBJECTS_DIR, 0755) == -1 || 
             mkdir(GIT_REFS_DIR, 0755) == -1) {
             fprintf(stderr, "Failed to create directories: %s\n", strerror(errno));
-            goto cleanup_and_error;
+            sb_free(sb);
+            return 1;
         }
         
         FILE *headFile = fopen(GIT_HEAD_FILE, "w");
         if (headFile == NULL) {
             fprintf(stderr, "Failed to create %s file: %s\n", GIT_HEAD_FILE, strerror(errno));
-            goto cleanup_and_error;
+            sb_free(sb);
+            return 1;
         }
+
         fprintf(headFile, "ref: refs/heads/main\n");
         fclose(headFile);
         
         fprintf(stdout, "Initialized git directory\n");
     } else if (strcmp(command, "write-tree") == 0) {
-        if(args_end(args)) {
-            usage(stderr, prog_name, "expected directory arg");
-            goto cleanup_and_error;
-        }
+        // if(args_end(args)) {
+        //     usage(stderr, prog_name, "expected directory arg");
+        //     goto cleanup_and_error;
+        // }
 
-        char *dir_path = args_consume(&args);
+        // char *dir_path = args_consume(&args);
+        
+        // Result result = walk_dir(dir_path, write_tree_command_dir_walker, sb);
+        // if(!result.ok) {
+        //     const char *error = result.as.error;
+        //     fprintf(stderr, "ERROR: %s\n", error);
+        //     goto cleanup_and_error;
+        // }
     } else if (strcmp(command, "ls-tree") == 0) {
-        bool name_only   = false;
-        bool object_only = false;
+        LsTreeOptions options = {
+            .name_only = false,
+            .object_only = false
+        };
         char *tree_hash  = NULL;
 
         while(!args_end(args)) {
@@ -159,12 +212,22 @@ int main(int argc, char *argv[]) {
 
             if(sv_starts_with(arg_sv, sv_from_cstr("--"))) {
                 if(sv_eq(arg_sv, sv_from_cstr("--name-only"))) {
-                    name_only = true;
+                    if(options.object_only) {
+                        fprintf(stderr, "ERROR: cannot set --name-only as --objects-only is already set\n");
+                        goto cleanup_and_error;
+                    }
+
+                    options.name_only = true;
                     continue;
                 }
 
                 if(sv_eq(arg_sv, sv_from_cstr("--object-only"))) {
-                    object_only = true; 
+                    if(options.object_only) {
+                        fprintf(stderr, "ERROR: cannot set --objects-only as --name-only is already set\n");
+                        goto cleanup_and_error;
+                    }
+
+                    options.object_only = true; 
                     continue;
                 }
 
@@ -182,7 +245,7 @@ int main(int argc, char *argv[]) {
 
         if(tree_hash == NULL) {
             fprintf(stderr, "ERROR: expected tree hash\n");
-            goto cleanup_and_error;
+            goto cleanup_and_error; 
         }
 
         usize tree_hash_len = strlen(tree_hash);
@@ -192,62 +255,14 @@ int main(int argc, char *argv[]) {
             goto cleanup_and_error;
         }
 
-        // tree_path_from_hash(tree_hash, tree_hash_len, sb);
-        // char *tree_object_path = sb_collect(sb);
+        LsTreeContext context = {
+            .cstr_hash = tree_hash,
+            .objects_dir_path = GIT_OBJECTS_DIR,
+            .options = options,
+            .sb = sb
+        };
 
-        // NOTE: Remove this and uncomment the previous one
-        sb_clear(sb);
-        sb_push_cstr(sb, tree_hash);
-        char *tree_object_path = sb_collect(sb);
-
-        Result decomp_result = zlib_decompress(tree_object_path, sb);
-        if(!decomp_result.ok) {
-            free(tree_object_path);
-
-            const char *error = decomp_result.as.error;
-            fprintf(stderr, "ERROR: %s\n", error);
-
-            goto cleanup_and_error;
-        }
-        free(tree_object_path);
-
-        usize tree_object_content_size = sb_len(sb);
-        char *tree_object_content = sb_collect(sb);
-
-        StringView tree_object_content_sv = sv_init(tree_object_content, tree_object_content_size);
-        
-        Result result = tree_parse(tree_object_content_sv);
-        if(!result.ok) {
-            free(tree_object_content);
-
-            const char *error = result.as.error;
-            fprintf(stderr, "ERROR: %s\n", error);
-
-            goto cleanup_and_error;
-        }
-        free(tree_object_content);
-
-        Tree *tree = (Tree *)result.as.data;
-
-        char buffer[HASH_TEXT_SIZE] = {0};
-        tree_foreach(tree, p) {
-            TreeEntry e = *p;
-            if(name_only) {
-                fprintf(stdout, "%s\n", e.file_name);
-                continue;
-            }
-            
-            usize n = hash_dump_to_buffer(e.hash, buffer);
-
-            if(object_only) {
-                fprintf(stdout, "%.*s\n", (int)n, buffer);
-                continue;
-            }
-
-            fprintf(stdout, "%u %s %.*s\n", e.mode, e.file_name, (int)n, buffer);
-        }
-
-        tree_free(tree);
+        code = ls_tree_command(context);
     } else if (strcmp(command, "hash-file") == 0) {
         if(args_end(args)) {
             usage(stderr, prog_name, "expected file path");
@@ -255,50 +270,14 @@ int main(int argc, char *argv[]) {
         }
         
         char *file_path = args_consume(&args);
-    
-        Result read_file_result = read_file_contents(file_path);
-        if(!read_file_result.ok) {
-            fprintf(stderr, "ERROR: %s\n", read_file_result.as.error);
-            goto cleanup_and_error;
-        }
+        
+        HashFileContext context = {
+            .file_path = file_path,
+            .sb = sb,
+            .objects_dir_path = GIT_OBJECTS_DIR
+        };
 
-        char *file_contents = read_file_result.as.data;
-        usize file_contents_len = strlen(file_contents);
-
-        Blob *blob = blob_new(file_contents_len, file_contents);
-        free(file_contents);
-
-        char hash_buffer[256] = {0};
-        usize hash_buffer_size = blob_hash(blob, hash_buffer);
-
-        object_dir_path_from_hash(hash_buffer, hash_buffer_size, sb);
-        char *output_dir_path = sb_collect(sb);
-
-        Result mkdir_result = mkdir_p(output_dir_path, 0755);
-        if(!mkdir_result.ok) {
-            free(output_dir_path);
-            fprintf(stderr, "ERROR: %s\n", mkdir_result.as.error);
-            goto cleanup_and_error;
-        }
-        free(output_dir_path);
-
-        object_path_from_hash(hash_buffer, hash_buffer_size, sb);
-        char *output_file_path = sb_collect(sb);
-
-        Result result = blob_write_to_file(blob, output_file_path, sb);
-        if(!result.ok) {
-            blob_free(blob);
-            free(output_file_path);
-
-            const char *error = result.as.error;
-            fprintf(stderr, "ERROR: %s\n", error);
-            
-            goto cleanup_and_error;
-        }
-        blob_free(blob);
-        free(output_file_path);
-
-        fprintf(stdout, "%s\n", hash_buffer);
+        code = hash_file_command(context);
     } else if (strcmp(command, "cat-file") == 0) {
         if(args_end(args)) {
             usage(stderr, prog_name, "expected -p flag to specify the blob hash");
@@ -323,26 +302,20 @@ int main(int argc, char *argv[]) {
             goto cleanup_and_error;
         }
 
-        object_path_from_hash(object_hash, object_hash_len, sb);
-        char *path = sb_collect(sb);
+        CatFileContext context = {
+            .cstr_hash = object_hash,
+            .objects_dir_path = GIT_OBJECTS_DIR,
+            .sb = sb
+        };
 
-        Result blob_result = blob_load_from_file(path, sb);
-        if(!blob_result.ok) {
-            free(path);
-
-            const char *error = blob_result.as.error;
-            fprintf(stderr, "ERROR: %s\n", error);
-
-            goto cleanup_and_error;
-        }
-        free(path);
-
-        Blob *blob = blob_result.as.data;
-        fprintf(stdout, "%.*s", (int)blob->len, blob->content); 
-
-        blob_free(blob);
+        code = cat_file_command(context);
     } else {
         fprintf(stderr, "Unknown command %s\n", command);
+        goto cleanup_and_error;
+    }
+
+    // indicator for error
+    if(code == 1) {
         goto cleanup_and_error;
     }
 
@@ -350,8 +323,5 @@ int main(int argc, char *argv[]) {
 
 cleanup_and_error:
     sb_free(sb);
-    goto _error;
-
-_error:
     return 1;
 }

@@ -17,7 +17,7 @@ typedef struct {
 } DirEntry;
 
 
-typedef void DirWalkerFunc(DirEntry entry);
+typedef void (*DirWalkerFunc)(DirEntry entry);
 
 // @return Result<NULL>
 Result walk_dir(char *dir_path, DirWalkerFunc walker, StringBuilder *sb);

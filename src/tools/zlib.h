@@ -12,7 +12,7 @@ Result zlib_decompress(const char *file_path, StringBuilder *sb);
 // @return Result<NULL>
 Result zlib_compress_and_save(StringView content, const char *file_path);
 
-#ifdef ZLIB_IMPLEMENTATION
+#ifdef ZLIB_IMPLEMENTATION_
 
 #define BUFFER_SIZE 16384
 
@@ -164,6 +164,6 @@ Result zlib_compress_and_save(StringView content, const char *file_path) {
     return result_ok(NULL);
 }
 
-#endif // ZLIB_IMPLEMENTATION
+#endif // ZLIB_IMPLEMENTATION_
 
 #endif // ZLIB_H_

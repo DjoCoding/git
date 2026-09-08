@@ -2,6 +2,7 @@
 #define _BLOB_H
 
 #include "../lib/include.h"
+#include "../tools/zlib.h"
 
 typedef struct {
     usize len;
@@ -22,6 +23,14 @@ void blob_format(Self *self, StringBuilder *sb);
 // @description get the hash of the blob inside buffer
 // @return returns size of the buffer
 usize blob_hash(Self *self, char *buffer);
+
+// @description load blob from file with zlib decompression
+// @return Result<Blob *>
+Result blob_load_from_file(char *file_path, StringBuilder *sb);
+
+// @description write blob to file with zlib compression
+// @return Result<NULL>
+Result blob_write_to_file(Self *self, char *file_path, StringBuilder *sb);
 
 void blob_free(Self *self);
 
@@ -94,6 +103,45 @@ void blob_format(Self *self, StringBuilder *sb) {
     sb_push_usize(sb, self->len);
     sb_push_char(sb, '\0');
     sb_push(sb, self->content, self->len);
+}
+
+Result blob_load_from_file(char *file_path, StringBuilder *sb) {
+    sb_clear(sb);
+    
+    Result decomp_result = zlib_decompress(file_path, sb);
+    if(!decomp_result.ok) return decomp_result;
+
+    usize content_len = sb_len(sb);
+    char *content = sb_collect(sb);
+
+    Result blob_result = blob_parse(sv_init(content, content_len));
+    if(!blob_result.ok) {
+        free(content);
+        return blob_result;
+    }
+    free(content);
+
+    return blob_result;
+}
+
+Result blob_write_to_file(Self *self, char *file_path, StringBuilder *sb) {
+    sb_clear(sb);
+
+    blob_format(self, sb);
+    
+    usize blob_size = sb_len(sb);
+    char *blob = sb_collect(sb);
+
+    StringView blob_sv = sv_init(blob, blob_size);
+    
+    Result result = zlib_compress_and_save(blob_sv, file_path);
+    if(!result.ok) {
+        free(blob);
+        return result;
+    }
+    free(blob);
+
+    return result_ok(NULL);
 }
 
 usize blob_hash(Self *self, char *buffer) {

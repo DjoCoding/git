@@ -11,17 +11,14 @@
 #define LIB_IMPLEMENTATION
 #include "lib/include.h"
 
+#define TOOLS_IMPLEMENTATION
+#include "tools/include.h"
+
 #define BLOB_IMPLEMENTATION_
 #include "core/blob.h"
 
 #define TREE_IMPLEMENTATION_
 #include "core/tree.h"
-
-#define ZLIB_IMPLEMENTATION
-#include "core/zlib.h"
-
-#define TOOLS_IMPLEMENTATION
-#include "tools/include.h"
 
 #define GIT_DIR "mygit"
 
@@ -89,39 +86,6 @@ Result read_file_contents(const char *file_path) {
     return result_ok(content);
 }
 
-typedef struct {
-    char **values;
-    int count;
-} Args;
-
-Args args_init(int argc, char *argv[]) {
-    Args args = {
-        .count = argc,
-        .values = argv
-    };
-    return args;
-}
-
-
-bool args_end(Args self) {
-    return self.count == 0;
-}
-
-char *args_peek(Args self) {
-    assert(!args_end(self));
-    return self.values[0];
-}
-
-char *args_consume(Args *self) {
-    assert(!args_end(*self));
-    
-    char *arg = self->values[0];
-
-    self->count -= 1;
-    self->values += 1;
-
-    return arg;
-}
 
 void usage(FILE *f, char *prog_name, char *error) {
     char buffer[1024] = {0};
@@ -133,6 +97,10 @@ void usage(FILE *f, char *prog_name, char *error) {
     }
    
     fprintf(f, "%s", buffer);
+}
+
+void walker(DirEntry entry) {
+    fprintf(stdout, "%s\n", entry.path);
 }
 
 int main(int argc, char *argv[]) {
@@ -180,8 +148,6 @@ int main(int argc, char *argv[]) {
         }
 
         char *dir_path = args_consume(&args);
-
-
     } else if (strcmp(command, "ls-tree") == 0) {
         bool name_only   = false;
         bool object_only = false;
@@ -319,27 +285,20 @@ int main(int argc, char *argv[]) {
         object_path_from_hash(hash_buffer, hash_buffer_size, sb);
         char *output_file_path = sb_collect(sb);
 
-        // format blob and free it
-        blob_format(blob, sb);
-        usize blob_content_size = sb_len(sb);
-        char *blob_content = sb_collect(sb);
-        blob_free(blob);
-
-        StringView blob_content_sv = sv_init(blob_content, blob_content_size);
-        Result compress_result = zlib_compress_and_save(blob_content_sv, output_file_path);
-        if(!compress_result.ok) {
-            free(blob_content);
+        Result result = blob_write_to_file(blob, output_file_path, sb);
+        if(!result.ok) {
+            blob_free(blob);
             free(output_file_path);
-            fprintf(stderr, "ERROR: %s\n", compress_result.as.error);
+
+            const char *error = result.as.error;
+            fprintf(stderr, "ERROR: %s\n", error);
+            
             goto cleanup_and_error;
         }
-
-        fprintf(stdout, "%s\n", hash_buffer);
-
-        free(blob_content);
+        blob_free(blob);
         free(output_file_path);
 
-        return 0;
+        fprintf(stdout, "%s\n", hash_buffer);
     } else if (strcmp(command, "cat-file") == 0) {
         if(args_end(args)) {
             usage(stderr, prog_name, "expected -p flag to specify the blob hash");
@@ -367,31 +326,15 @@ int main(int argc, char *argv[]) {
         object_path_from_hash(object_hash, object_hash_len, sb);
         char *path = sb_collect(sb);
 
-        Result decomp_result = zlib_decompress(path, sb);
-        if(!decomp_result.ok) {
-            free(path);
-
-            const char *error = decomp_result.as.error;
-            fprintf(stderr, "ERROR: %s\n", error);
-
-            goto cleanup_and_error;
-        }
-
-        usize content_len = sb_len(sb);
-        char *content = sb_collect(sb);
-
-        Result blob_result = blob_parse(sv_init(content, content_len));
+        Result blob_result = blob_load_from_file(path, sb);
         if(!blob_result.ok) {
             free(path);
-            free(content);
-            
+
             const char *error = blob_result.as.error;
             fprintf(stderr, "ERROR: %s\n", error);
-            
+
             goto cleanup_and_error;
         }
-
-        free(content);
         free(path);
 
         Blob *blob = blob_result.as.data;

@@ -6,7 +6,7 @@
 typedef struct {
 	u32 mode;
 	char *file_name;  // owned
-	unsigned char  hash[HASH_BYTES_SIZE];
+	unsigned char hash[HASH_BYTES_SIZE];
 } TreeEntry;
 
 typedef struct {
@@ -22,6 +22,10 @@ typedef struct {
 
 // @return Result<Tree *>
 Result tree_parse(StringView tree_content);
+
+// @return format the tree inside the string builder
+void tree_format(Self *self, StringBuilder *sb);
+
 
 #ifdef TREE_IMPLEMENTATION_
 
@@ -214,6 +218,38 @@ Result tree_parse(StringView tree_content) {
 	}
 
 	return result_ok(tree);
+}
+
+void tree_format(Self *self, StringBuilder *sb) {
+	sb_clear(sb);
+	
+	tree_foreach(self, p) {
+		TreeEntry e = *p;
+		
+		sb_push_usize(sb, e.mode);
+		sb_push_char(sb, ' ');
+
+		sb_push_cstr(sb, e.file_name);
+		sb_push_char(sb, '\0');
+
+		char buffer[HASH_TEXT_SIZE] = {0};
+		usize size = hash_dump_to_buffer(e.hash, buffer);
+		assert(size == HASH_TEXT_SIZE);
+		sb_push(sb, buffer, HASH_TEXT_SIZE);
+	}
+
+
+	usize content_size = sb_len(sb);
+	char *content      = sb_collect(sb);
+	
+	sb_clear(sb);
+
+	sb_push_cstr(sb, "tree ");
+	sb_push_usize(sb, content_size);
+	sb_push_char(sb, '\0');
+	sb_push(sb, content, content_size);
+
+	free(content);
 }
 
 #endif // TREE_IMPLEMENTATION_

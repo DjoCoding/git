@@ -17,7 +17,7 @@ typedef struct {
     } tree_entries;
 } WriteTreeDirWalkCallbackContext;
 
-// @return Result<char *> (hash text of the tree)
+// @return Result<char *> (hash bytes unsigned char[HASH_BYTES_SIZE])
 Result write_tree(char *dir_path, char *objects_dir_path, StringBuilder *sb);
 
 #ifdef WRITE_TREE_IMPLEMENTATION_
@@ -180,7 +180,9 @@ Result write_tree(char *dir_path, char *objects_dir_path, StringBuilder *sb) {
     }
     assert(dir_entry != NULL);
 
-    char *hash = hash_to_text(dir_entry->hash, sb);
+    sb_clear(sb);
+    sb_push(sb, (char *)dir_entry->hash, HASH_BYTES_SIZE);
+    char *hash_bytes = sb_collect(sb);
 
     p = NULL;
     vec_foreach(context.tree_entries, p) {
@@ -189,7 +191,7 @@ Result write_tree(char *dir_path, char *objects_dir_path, StringBuilder *sb) {
     }
     vec_free(context.tree_entries);
 
-    return result_ok(hash);
+    return result_ok(hash_bytes);
 }
 
 

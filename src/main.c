@@ -14,11 +14,17 @@
 #define TOOLS_IMPLEMENTATION
 #include "tools/include.h"
 
+#define CORE_UTILS_IMPLEMENTATION
+#include "core/utils/include.h"
+
 #define BLOB_IMPLEMENTATION_
 #include "core/blob.h"
 
 #define TREE_IMPLEMENTATION_
 #include "core/tree.h"
+
+#define COMMIT_IMPLEMENTATION_
+#include "core/commit.h"
 
 #define CORE_ACTIONS_IMPLEMENTATION
 #include "core/actions/include.h"
@@ -61,10 +67,16 @@ int hash_file_command(HashFileCommandContext context) {
         return 1;
     }
 
-    char *hash = (char *)result.as.data;
-    fprintf(stdout, "%s\n", hash);
+    char *hash_bytes = result.as.data;
+    ASSERT_CSTR_IS_HASH_BYTES(hash_bytes);
 
-    free(hash);
+    char *hash_text = hash_to_text((unsigned char *)hash_bytes, context.sb);
+
+    fprintf(stdout, "%s\n", hash_text);
+
+    free(hash_bytes);
+    free(hash_text);
+
     return 0;
 }
 
@@ -150,6 +162,8 @@ typedef struct {
     StringBuilder *sb;
 } WriteTreeCommandContext;
 
+// @command write-tree
+// @example write-tree <dir>
 int write_tree_command(WriteTreeCommandContext context) {
     assert(context.dir_path != NULL);
     assert(context.objects_dir_path != NULL);
@@ -162,10 +176,15 @@ int write_tree_command(WriteTreeCommandContext context) {
         return 1;
     } 
 
-    char *hash = result.as.data;
-    fprintf(stdout, "%s\n", hash);
+    char *hash_bytes = result.as.data;
+    ASSERT_CSTR_IS_HASH_BYTES(hash_bytes);
 
-    free(hash);
+    char *hash_text = hash_to_text((unsigned char *)hash_bytes, context.sb);
+    fprintf(stdout, "%s\n", hash_text);
+
+    free(hash_bytes);
+    free(hash_text);
+    
     return 0;
 }
 
@@ -176,6 +195,8 @@ typedef struct {
     char *head_file_path;
 } InitCommandContext;
 
+// @command init
+// @example init
 int init_command(InitCommandContext context) {
     assert(context.root_dir_path != NULL);
     assert(context.objects_dir_path != NULL);
@@ -196,6 +217,45 @@ int init_command(InitCommandContext context) {
 
     
     fprintf(stdout, "Initialized git directory\n");
+    return 0;
+}
+
+typedef struct {
+    char *tree_hash;
+    char *message;
+} CommitTreeOptions;
+
+typedef struct {
+    char *objects_dir_path;
+    char *tree_hash;
+    char *message;
+    StringBuilder *sb;
+} CommitTreeCommandContext;
+
+// @command commit-tree
+// @example commit-tree <tree_hash> -m[--message] <message>
+int commit_tree_command(CommitTreeCommandContext context) {
+    assert(context.objects_dir_path != NULL);
+    assert(context.tree_hash != NULL);
+    assert(context.message != NULL);
+    assert(context.sb != NULL);
+
+    Result result = commit_tree(context.tree_hash, context.message, context.objects_dir_path, context.sb);
+    if(!result.ok) {
+        const char *error = result.as.error;
+        fprintf(stderr, "ERROR: %s\n", error);
+        return 1;
+    }
+
+    char *hash_bytes = result.as.data;
+    ASSERT_CSTR_IS_HASH_BYTES(hash_bytes);
+
+    char *hash_text = hash_to_text((unsigned char *)hash_bytes, context.sb);
+    fprintf(stdout, "%s\n", hash_text);
+
+    free(hash_bytes);
+    free(hash_text);
+
     return 0;
 }
 
@@ -222,7 +282,6 @@ int main(int argc, char *argv[]) {
     StringBuilder *sb = sb_new();
 
     if (strcmp(command, "init") == 0) {
-
         InitCommandContext context = {
             .root_dir_path = GIT_DIR,
             .objects_dir_path = GIT_OBJECTS_DIR,
@@ -231,6 +290,65 @@ int main(int argc, char *argv[]) {
         };
 
         code = init_command(context);
+    } else if (strcmp(command, "commit-tree") == 0) {
+        CommitTreeOptions options = {0};
+
+        while(!args_end(args)) {
+            char *arg = args_consume(&args);
+            
+            StringView arg_sv = sv_from_cstr(arg);
+
+            if(sv_starts_with(arg_sv, sv_from_cstr("-"))) {
+                if(
+                    sv_eq(arg_sv, sv_from_cstr("-m")) ||
+                    sv_eq(arg_sv, sv_from_cstr("--message")) 
+                ) {
+                    if(options.message != NULL) {
+                        fprintf(stderr, "ERROR: can only provide one commit message\n");
+                        goto cleanup_and_error;
+                    }
+
+                    if(args_end(args)) {
+                        fprintf(stderr, "ERROR: expected commit message\n");
+                        goto cleanup_and_error;
+                    }
+
+                    char *message = args_consume(&args);
+                    options.message = message;
+
+                    continue;
+                }
+
+                fprintf(stderr, "ERROR: invalid arg %s\n", arg);
+                goto cleanup_and_error;
+            }
+
+            if(options.tree_hash != NULL) {
+                fprintf(stderr, "ERROR: can only provide one tree hash\n");
+                goto cleanup_and_error;
+            } 
+
+            options.tree_hash = arg;
+        }
+
+        if(options.tree_hash == NULL) {
+            fprintf(stderr, "ERROR: must provide tree hash\n");
+            goto cleanup_and_error;
+        }
+
+        if(options.message == NULL) {
+            fprintf(stderr, "ERROR: must provide commit message\n");
+            goto cleanup_and_error;
+        }
+
+        CommitTreeCommandContext context = {
+            .objects_dir_path = GIT_OBJECTS_DIR,
+            .tree_hash = options.tree_hash,
+            .message = options.message,
+            .sb = sb
+        };
+
+        code = commit_tree_command(context);
     } else if (strcmp(command, "write-tree") == 0) {
         if(args_end(args)) {
             usage(stderr, prog_name, "expected directory arg");

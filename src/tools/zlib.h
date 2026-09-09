@@ -72,7 +72,7 @@ Result zlib_decompress(const char *file_path, StringBuilder *sb) {
             if (bytes_produced > 0) {
                 sb_push(
                     sb,
-                    (const char *)output_buffer,
+                    (char *)output_buffer,
                     bytes_produced
                 );
             }

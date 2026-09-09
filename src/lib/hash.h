@@ -14,6 +14,21 @@ void hash__(StringView sv, unsigned char output_hash_buffer[HASH_BYTES_SIZE]);
 // @description get the representation of the hash bytes as text
 char *hash_to_text(unsigned char hash_buffer[HASH_BYTES_SIZE], StringBuilder *sb);
 
+#include <string.h>
+#include <stdio.h>
+
+#define ASSERT_CSTR_IS_HASH_BYTES(cstr) \
+    do { \
+        size_t size = strlen(cstr); \
+        assert(size == HASH_BYTES_SIZE); \
+    } while(0)
+
+#define ASSERT_CSTR_IS_HASH_TEXT(cstr) \
+    do { \
+        size_t size = strlen(cstr); \
+        assert(size == HASH_TEXT_SIZE); \
+    } while(0)
+
 #ifdef HASH_IMPLEMENTATION_
 
 #include <string.h>

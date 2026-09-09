@@ -1,6 +1,7 @@
 #ifndef STRING_H_
 #define STRING_H_
 
+#include "sv.h"
 #include "types.h"
 
 typedef struct {
@@ -13,8 +14,9 @@ typedef struct {
 
 Self *sb_new();
 
-void sb_push(Self *self, const char *content, usize size);
+void sb_push(Self *self, char *content, usize size);
 void sb_push_cstr(Self *self, char *cstr);
+void sb_push_sv(Self *self, StringView sv);
 void sb_push_char(Self *self, char c);
 
 // @description collect the string into a cstr and clear the data of the builder
@@ -54,7 +56,7 @@ Self *sb_new() {
     return sb;
 }
 
-void sb_push(Self *self, const char *content, usize size) {
+void sb_push(Self *self, char *content, usize size) {
     usize required = self->len + size;
 
     if (required > self->cap) {
@@ -105,6 +107,10 @@ char *sb_collect(Self *self) {
     sb_clear(self);
     
     return content;
+}
+
+void sb_push_sv(Self *self, StringView sv) {
+    return sb_push(self, sv.content, sv.len);
 }
 
 void sb_clear(Self *self) {

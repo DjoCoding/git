@@ -90,6 +90,8 @@ typedef struct {
 // @example cat-file -p <blob_hash>
 int cat_file_command(CatFileCommandContext context) {
     assert(context.cstr_hash != NULL);
+    ASSERT_CSTR_IS_HASH_TEXT(context.cstr_hash);
+    
     assert(context.objects_dir_path != NULL);
     assert(context.sb != NULL);
 
@@ -118,6 +120,8 @@ typedef struct {
 // @example ls-tree <tree_hash>
 int ls_tree_command(LsTreeCommandContext context) {
     assert(context.cstr_hash != NULL);
+    ASSERT_CSTR_IS_HASH_TEXT(context.cstr_hash);
+    
     assert(context.objects_dir_path != NULL);
     assert(context.sb != NULL);
 
@@ -236,7 +240,10 @@ typedef struct {
 // @example commit-tree <tree_hash> -m[--message] <message>
 int commit_tree_command(CommitTreeCommandContext context) {
     assert(context.objects_dir_path != NULL);
+
     assert(context.tree_hash != NULL);
+    ASSERT_CSTR_IS_HASH_TEXT(context.tree_hash);
+
     assert(context.message != NULL);
     assert(context.sb != NULL);
 
@@ -295,7 +302,6 @@ int main(int argc, char *argv[]) {
 
         while(!args_end(args)) {
             char *arg = args_consume(&args);
-            
             StringView arg_sv = sv_from_cstr(arg);
 
             if(sv_starts_with(arg_sv, sv_from_cstr("-"))) {
@@ -333,6 +339,12 @@ int main(int argc, char *argv[]) {
 
         if(options.tree_hash == NULL) {
             fprintf(stderr, "ERROR: must provide tree hash\n");
+            goto cleanup_and_error;
+        }
+
+        usize tree_hash_len = strlen(options.tree_hash);
+        if(tree_hash_len != HASH_TEXT_SIZE) {
+            fprintf(stderr, "ERROR: invalid tree hash format\n");
             goto cleanup_and_error;
         }
 
@@ -414,9 +426,8 @@ int main(int argc, char *argv[]) {
         }
 
         usize tree_hash_len = strlen(tree_hash);
-
         if(tree_hash_len != HASH_TEXT_SIZE) {
-            fprintf(stderr, "ERROR: invalid tree hash\n");
+            fprintf(stderr, "ERROR: invalid tree hash format\n");
             goto cleanup_and_error;
         }
 
@@ -462,8 +473,8 @@ int main(int argc, char *argv[]) {
 
         char *object_hash = args_consume(&args);
         usize object_hash_len = strlen(object_hash);
-        if(object_hash_len < 2) {
-            fprintf(stderr, "ERROR: invalid object hash");
+        if(object_hash_len != HASH_TEXT_SIZE) {
+            fprintf(stderr, "ERROR: invalid blob hash format");
             goto cleanup_and_error;
         }
 

@@ -169,6 +169,36 @@ int write_tree_command(WriteTreeCommandContext context) {
     return 0;
 }
 
+typedef struct {
+    char *root_dir_path;
+    char *objects_dir_path;
+    char *refs_dir_path;
+    char *head_file_path;
+} InitCommandContext;
+
+int init_command(InitCommandContext context) {
+    assert(context.root_dir_path != NULL);
+    assert(context.objects_dir_path != NULL);
+    assert(context.refs_dir_path != NULL);
+    assert(context.head_file_path != NULL);
+
+    Result result = init(
+        context.root_dir_path,
+        context.objects_dir_path,
+        context.refs_dir_path,
+        context.head_file_path
+    );
+    if(!result.ok) {
+        const char *error = result.as.error;
+        fprintf(stderr, "ERROR: %s\n", error);
+        return 1;
+    }
+
+    
+    fprintf(stdout, "Initialized git directory\n");
+    return 0;
+}
+
 
 int main(int argc, char *argv[]) {
     int code = 0;
@@ -192,27 +222,15 @@ int main(int argc, char *argv[]) {
     StringBuilder *sb = sb_new();
 
     if (strcmp(command, "init") == 0) {
-        // TODO: Uncomment the code below to pass the first stage
-        
-        if (mkdir(GIT_DIR, 0755) == -1 || 
-            mkdir(GIT_OBJECTS_DIR, 0755) == -1 || 
-            mkdir(GIT_REFS_DIR, 0755) == -1) {
-            fprintf(stderr, "Failed to create directories: %s\n", strerror(errno));
-            sb_free(sb);
-            return 1;
-        }
-        
-        FILE *headFile = fopen(GIT_HEAD_FILE, "w");
-        if (headFile == NULL) {
-            fprintf(stderr, "Failed to create %s file: %s\n", GIT_HEAD_FILE, strerror(errno));
-            sb_free(sb);
-            return 1;
-        }
 
-        fprintf(headFile, "ref: refs/heads/main\n");
-        fclose(headFile);
-        
-        fprintf(stdout, "Initialized git directory\n");
+        InitCommandContext context = {
+            .root_dir_path = GIT_DIR,
+            .objects_dir_path = GIT_OBJECTS_DIR,
+            .refs_dir_path = GIT_REFS_DIR,
+            .head_file_path = GIT_HEAD_FILE
+        };
+
+        code = init_command(context);
     } else if (strcmp(command, "write-tree") == 0) {
         if(args_end(args)) {
             usage(stderr, prog_name, "expected directory arg");

@@ -26,8 +26,8 @@
 #define GIT_DIR "mygit"
 
 char *GIT_OBJECTS_DIR = GIT_DIR "/objects";
-char *GIT_REFS_DIR = GIT_DIR ".git/refs";
-char *GIT_HEAD_FILE = GIT_DIR ".git/HEAD";
+char *GIT_REFS_DIR = GIT_DIR "/refs";
+char *GIT_HEAD_FILE = GIT_DIR "/HEAD";
 
 void usage(FILE *f, char *prog_name, char *error) {
     char buffer[1024] = {0};
@@ -45,11 +45,11 @@ typedef struct {
     char *file_path;
     StringBuilder *sb;
     char *objects_dir_path;
-} HashFileContext;
+} HashFileCommandContext;
 
 // @command hash-file
 // @example hash-file src/main.c
-int hash_file_command(HashFileContext context) {
+int hash_file_command(HashFileCommandContext context) {
     assert(context.file_path != NULL);
     assert(context.objects_dir_path != NULL);
     assert(context.sb != NULL);
@@ -72,11 +72,11 @@ typedef struct {
     char *cstr_hash;
     StringBuilder *sb;
     char *objects_dir_path;
-} CatFileContext;
+} CatFileCommandContext;
 
 // @command cat-file
 // @example cat-file -p <blob_hash>
-int cat_file_command(CatFileContext context) {
+int cat_file_command(CatFileCommandContext context) {
     assert(context.cstr_hash != NULL);
     assert(context.objects_dir_path != NULL);
     assert(context.sb != NULL);
@@ -100,11 +100,11 @@ typedef struct {
     char *objects_dir_path;
     StringBuilder *sb;
     LsTreeOptions options;
-} LsTreeContext;
+} LsTreeCommandContext;
 
 // @command ls-tree
 // @example ls-tree <tree_hash>
-int ls_tree_command(LsTreeContext context) {
+int ls_tree_command(LsTreeCommandContext context) {
     assert(context.cstr_hash != NULL);
     assert(context.objects_dir_path != NULL);
     assert(context.sb != NULL);
@@ -119,28 +119,56 @@ int ls_tree_command(LsTreeContext context) {
     Tree *tree = (Tree *)result.as.data;
 
     LsTreeOptions options = context.options;
-    char buffer[1024] = {0};
 
-    tree_foreach(tree, p) {
+    TreeEntry *p = NULL;
+    vec_foreach(*tree, p) {
         TreeEntry e = *p;
         if(options.name_only) {
             fprintf(stdout, "%s\n", e.file_name);
             continue;
         }
-        
-        usize n = hash_dump_to_buffer(e.hash, buffer);
+
+        char *hash = hash_to_text(e.hash, context.sb);
 
         if(options.object_only) {
-            fprintf(stdout, "%.*s\n", (int)n, buffer);
+            fprintf(stdout, "%s\n", hash);
+            free(hash);
             continue;
         }
 
-        fprintf(stdout, "%u %s %.*s\n", e.mode, e.file_name, (int)n, buffer);
+        fprintf(stdout, "%u %s %s\n", e.mode, e.file_name, hash);
+        free(hash);
     }
 
     tree_free(tree);
     return 0;
 }
+
+typedef struct {
+    char *objects_dir_path;
+    char *dir_path;
+    StringBuilder *sb;
+} WriteTreeCommandContext;
+
+int write_tree_command(WriteTreeCommandContext context) {
+    assert(context.dir_path != NULL);
+    assert(context.objects_dir_path != NULL);
+    assert(context.sb != NULL);
+
+    Result result = write_tree(context.dir_path, context.objects_dir_path, context.sb);
+    if(!result.ok) {
+        const char *error = result.as.error;
+        fprintf(stderr, "ERROR: %s\n", error);
+        return 1;
+    } 
+
+    char *hash = result.as.data;
+    fprintf(stdout, "%s\n", hash);
+
+    free(hash);
+    return 0;
+}
+
 
 int main(int argc, char *argv[]) {
     int code = 0;
@@ -186,19 +214,20 @@ int main(int argc, char *argv[]) {
         
         fprintf(stdout, "Initialized git directory\n");
     } else if (strcmp(command, "write-tree") == 0) {
-        // if(args_end(args)) {
-        //     usage(stderr, prog_name, "expected directory arg");
-        //     goto cleanup_and_error;
-        // }
+        if(args_end(args)) {
+            usage(stderr, prog_name, "expected directory arg");
+            goto cleanup_and_error;
+        }
 
-        // char *dir_path = args_consume(&args);
-        
-        // Result result = walk_dir(dir_path, write_tree_command_dir_walker, sb);
-        // if(!result.ok) {
-        //     const char *error = result.as.error;
-        //     fprintf(stderr, "ERROR: %s\n", error);
-        //     goto cleanup_and_error;
-        // }
+        char *dir_path = args_consume(&args);
+
+        WriteTreeCommandContext context = {
+            .dir_path = dir_path,
+            .objects_dir_path = GIT_OBJECTS_DIR,
+            .sb = sb
+        };
+
+        code = write_tree_command(context);
     } else if (strcmp(command, "ls-tree") == 0) {
         LsTreeOptions options = {
             .name_only = false,
@@ -255,7 +284,7 @@ int main(int argc, char *argv[]) {
             goto cleanup_and_error;
         }
 
-        LsTreeContext context = {
+        LsTreeCommandContext context = {
             .cstr_hash = tree_hash,
             .objects_dir_path = GIT_OBJECTS_DIR,
             .options = options,
@@ -271,7 +300,7 @@ int main(int argc, char *argv[]) {
         
         char *file_path = args_consume(&args);
         
-        HashFileContext context = {
+        HashFileCommandContext context = {
             .file_path = file_path,
             .sb = sb,
             .objects_dir_path = GIT_OBJECTS_DIR
@@ -302,7 +331,7 @@ int main(int argc, char *argv[]) {
             goto cleanup_and_error;
         }
 
-        CatFileContext context = {
+        CatFileCommandContext context = {
             .cstr_hash = object_hash,
             .objects_dir_path = GIT_OBJECTS_DIR,
             .sb = sb

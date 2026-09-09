@@ -4,21 +4,20 @@
 #include "../lib/include.h"
 
 typedef struct {
-	u32 mode;
+	u16   mode;
 	char *file_name;  // owned
 	unsigned char hash[HASH_BYTES_SIZE];
 } TreeEntry;
 
 typedef struct {
-	TreeEntry *entries;
+	TreeEntry *items;
 	usize	  len;
 	usize     cap;
 } Tree;
 
-#define tree_foreach(t, e) \
-	for(TreeEntry *e = t->entries; e < t->entries + t->len; ++e)
-
 #define Self Tree
+
+Self *tree_new();
 
 // @return Result<Tree *>
 Result tree_parse(StringView tree_content);
@@ -26,6 +25,19 @@ Result tree_parse(StringView tree_content);
 // @return format the tree inside the string builder
 void tree_format(Self *self, StringBuilder *sb);
 
+// @description get the hash of the tree format
+void tree_hash__(Self *self, unsigned char hash_buffer[HASH_BYTES_SIZE], StringBuilder *sb);
+
+// @return Result<Tree *>
+Result tree_load_from_file(char *file_path, StringBuilder *sb);
+
+// @return Result<NULL>
+Result tree_write_to_file(Self *self, char *file_path, StringBuilder *sb);
+
+TreeEntry tree_entry_init(u16 mode, StringView file_name, StringView hash);
+
+// @description performs a - b
+int tree_entry_compare(TreeEntry a, TreeEntry b);
 
 #ifdef TREE_IMPLEMENTATION_
 
@@ -46,38 +58,24 @@ Self *tree_new() {
 		exit(1);
 	}
 
-
-	self->entries = NULL;
-	self->len = 0;
-	self->cap = 0;
-
+	*self = (Tree){0};
+	
 	return self;
 }
 
 void tree_push_entry(Self *self, TreeEntry entry) {
-	if(self->len >= self->cap) {
-		self->cap = self->cap == 0 ? TREE_VEC_INITIAL_CAP : self->cap * 2;
-		
-		self->entries = (TreeEntry *)realloc(self->entries, sizeof(*self->entries) * self->cap);
-		if(self->entries == NULL) {
-			perror("realloc");
-			exit(1);
-		}
-	}
-
-	self->entries[self->len] = entry;
-	self->len += 1; 
+	vec_append(*self, entry);
 }
 
 void tree_free(Self *self) {
 	for(usize i = 0; i < self->len; ++i) {
-		free(self->entries[i].file_name);
+		free(self->items[i].file_name);
 	}
-	free(self->entries);
+	free(self->items);
 	free(self);
 }
 
-TreeEntry tree_entry_init(u32 mode, StringView file_name, StringView hash) {
+TreeEntry tree_entry_init(u16 mode, StringView file_name, StringView hash) {
 	TreeEntry entry = {0};
 
 	entry.mode = mode;
@@ -90,7 +88,8 @@ TreeEntry tree_entry_init(u32 mode, StringView file_name, StringView hash) {
 	memcpy(entry.file_name, file_name.content, file_name.len);
 	entry.file_name[file_name.len] = 0;
 
-	memcpy(entry.hash, hash.content, hash.len); // unsafe
+	assert(hash.len == HASH_BYTES_SIZE && "must pass hash bytes and not hash text");
+	memcpy(entry.hash, hash.content, hash.len);
 
 	return entry;
 }
@@ -147,19 +146,29 @@ Result tree_parser_resize_content(TreeParser *parser) {
 	return result_ok(NULL);
 }
 
+static bool is_valid_git_mode(u32 mode) {
+    return mode == 040000 ||
+           mode == 0100644 ||
+           mode == 0100755 ||
+           mode == 0120000 ||
+           mode == 0160000;
+}
+
 Result tree_parse_next(TreeParser *parser) {
 	StringView mode_sv = sv_until(parser->content, ' ');
 
-	if(!sv_is_number(mode_sv)) {
-		return result_error("invalid tree entry format");
-	}
-
-	i64 mode64 = sv_to_i64(mode_sv);
-	if(mode64 <= 0) {
+	// all modes have size 6
+	if(mode_sv.len != 6) {
 		return result_error("invalid tree entry mode");
 	}
 
-	u32 mode = (u32)mode64;
+	char buffer[7] = {0};
+	memcpy(buffer, mode_sv.content, mode_sv.len);
+
+	u16 mode = strtoul(buffer, NULL, 8);
+	if(!is_valid_git_mode(mode)) {
+		return result_error("invalid tree entry mode");
+	}
 
 	parser->content = sv_slice(parser->content, mode_sv.len, parser->content.len);
 	if(!sv_starts_with(parser->content, sv_from_cstr(" "))) {
@@ -182,18 +191,20 @@ Result tree_parse_next(TreeParser *parser) {
 		return result_error("invalid tree entry format");
 	}
 
-	StringView sha_bytes = sv_slice(parser->content, 0, HASH_BYTES_SIZE);
+	StringView hash_bytes_sv = sv_slice(parser->content, 0, HASH_BYTES_SIZE);
 	
-	parser->content = sv_slice(parser->content, sha_bytes.len, parser->content.len);
+	unsigned char hash_bytes_buffer[HASH_BYTES_SIZE] = {0};
+	memcpy(hash_bytes_buffer, hash_bytes_sv.content, HASH_BYTES_SIZE);
+
+	parser->content = sv_slice(parser->content, hash_bytes_sv.len, parser->content.len);
 	parser->__parsed_entry = tree_entry_init(
 		mode,
 		file_name_sv,
-		sha_bytes
+		sv_init((char *)hash_bytes_buffer, HASH_BYTES_SIZE)
 	);
 
 	return result_ok(&parser->__parsed_entry);
 }
-
 
 Result tree_parse(StringView tree_content) {
 	TreeParser parser = tree_parser_init(tree_content);
@@ -223,19 +234,17 @@ Result tree_parse(StringView tree_content) {
 void tree_format(Self *self, StringBuilder *sb) {
 	sb_clear(sb);
 	
-	tree_foreach(self, p) {
+	TreeEntry *p = NULL;
+	vec_foreach(*self, p) {
 		TreeEntry e = *p;
 		
-		sb_push_usize(sb, e.mode);
+		sb_pushf(sb, "%06o", e.mode);
 		sb_push_char(sb, ' ');
 
 		sb_push_cstr(sb, e.file_name);
 		sb_push_char(sb, '\0');
 
-		char buffer[HASH_TEXT_SIZE] = {0};
-		usize size = hash_dump_to_buffer(e.hash, buffer);
-		assert(size == HASH_TEXT_SIZE);
-		sb_push(sb, buffer, HASH_TEXT_SIZE);
+		sb_push(sb, (char *)e.hash, HASH_BYTES_SIZE);
 	}
 
 
@@ -245,11 +254,64 @@ void tree_format(Self *self, StringBuilder *sb) {
 	sb_clear(sb);
 
 	sb_push_cstr(sb, "tree ");
-	sb_push_usize(sb, content_size);
+	sb_pushf(sb, "%zu", content_size);
 	sb_push_char(sb, '\0');
 	sb_push(sb, content, content_size);
 
 	free(content);
+}
+
+void tree_hash__(Self *self, unsigned char hash_buffer[HASH_BYTES_SIZE], StringBuilder *sb) {
+	tree_format(self, sb);
+    usize tree_format_len = sb_len(sb);
+    char *tree_format_content = sb_collect(sb);
+    
+    StringView tree_sv = sv_init(tree_format_content, tree_format_len);
+    hash__(tree_sv, hash_buffer);
+    free(tree_format_content);
+}
+
+Result tree_load_from_file(char *file_path, StringBuilder *sb) {
+    sb_clear(sb);
+    
+    Result decomp_result = zlib_decompress(file_path, sb);
+    if(!decomp_result.ok) return decomp_result;
+
+    usize content_len = sb_len(sb);
+    char *content = sb_collect(sb);
+
+    Result tree_result = tree_parse(sv_init(content, content_len));
+    if(!tree_result.ok) {
+        free(content);
+        return tree_result;
+    }
+    free(content);
+
+    return tree_result;
+}
+
+Result tree_write_to_file(Self *self, char *file_path, StringBuilder *sb) {
+    sb_clear(sb);
+
+    tree_format(self, sb);
+    
+    usize tree_format_len = sb_len(sb);
+    char *tree_format_content = sb_collect(sb);
+
+    StringView tree_sv = sv_init(tree_format_content, tree_format_len);
+
+    Result result = zlib_compress_and_save(tree_sv, file_path);
+    if(!result.ok) {
+        free(tree_format_content);
+        return result;
+    }
+    free(tree_format_content);
+
+    return result_ok(NULL);
+}
+
+int tree_entry_compare(TreeEntry a, TreeEntry b) {
+	return strcmp(a.file_name, b.file_name);
 }
 
 #endif // TREE_IMPLEMENTATION_

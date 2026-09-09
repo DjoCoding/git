@@ -20,35 +20,20 @@ Result ls_tree(char *cstr_hash, char *objects_dir_path, StringBuilder *sb) {
 	usize hash_len = strlen(cstr_hash);
 	assert(hash_len >= 2);
 
-    // sb_clear(sb);
-    // sb_push_cstr(sb, GIT_OBJECTS_DIR);
-    // sb_push_cstr(sb, "/");
-    // sb_push(sb, cstr_hash, 2);
-    // sb_push_cstr(sb, "/");
-    // sb_push(sb, cstr_hash + 2, hash_len - 2);
-
-	sb_clear(sb);
-	sb_push_cstr(sb, cstr_hash);
+    sb_clear(sb);
+    sb_push_cstr(sb, objects_dir_path);
+    sb_push_cstr(sb, "/");
+    sb_push(sb, cstr_hash, 2);
+    sb_push_cstr(sb, "/");
+    sb_push(sb, cstr_hash + 2, hash_len - 2);
 	char *tree_object_path = sb_collect(sb);
 
-	Result decomp_result = zlib_decompress(tree_object_path, sb);
-	if(!decomp_result.ok) {
-		free(tree_object_path);
-		return decomp_result;
-	}
-	free(tree_object_path);
-
-	usize tree_object_content_size = sb_len(sb);
-	char *tree_object_content = sb_collect(sb);
-
-	StringView tree_object_content_sv = sv_init(tree_object_content, tree_object_content_size);
-        
-	Result result = tree_parse(tree_object_content_sv);
+	Result result = tree_load_from_file(tree_object_path, sb);
 	if(!result.ok) {
-		free(tree_object_content);
+		free(tree_object_path);
 		return result;
 	}
-	free(tree_object_content);
+	free(tree_object_path);
 
 	Tree *tree = (Tree *)result.as.data;
 	return result_ok(tree);

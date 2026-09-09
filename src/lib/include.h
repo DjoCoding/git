@@ -14,5 +14,6 @@
 #include "sv.h"
 #include "types.h"
 #include "hash.h"
+#include "vec.h"
 
 #endif

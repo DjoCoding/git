@@ -13,14 +13,23 @@ typedef enum {
 typedef struct {
     char *path;
     DirEntryType type;
-    u32 permissions;
+    u16 git_mode;
 } DirEntry;
 
+typedef void (*DirWalkCallback)(DirEntry entry, void *context);
 
-typedef void (*DirWalkerFunc)(DirEntry entry);
+typedef struct {
+    bool            pre_order;              // when set to true, the walker calls the callback on the dir then goes to handle its children
+    StringBuilder   *sb;                    // string builder for string management
+    void            *cb_context;            // context for the walker callback
+} WalkContext;
+
+WalkContext walk_context_init(bool pre_order, StringBuilder *sb, void *cb_context);
 
 // @return Result<NULL>
-Result walk_dir(char *dir_path, DirWalkerFunc walker, StringBuilder *sb);
+Result walk_dir(char *dir_path, DirWalkCallback callback, WalkContext context);
+
+const char *direntry_type_to_string(DirEntryType type);
 
 #ifdef DIR_WALKER_IMPLEMENTATION_
 
@@ -29,7 +38,7 @@ Result walk_dir(char *dir_path, DirWalkerFunc walker, StringBuilder *sb);
 #include <sys/types.h>
 #include <string.h>
 
-u16 permissions_from_mode(mode_t mode) {
+u16 permissions_from_stat(mode_t mode) {
     u8 owner = ((mode & S_IRUSR) ? 4 : 0) |
                ((mode & S_IWUSR) ? 2 : 0) |
                ((mode & S_IXUSR) ? 1 : 0);
@@ -45,7 +54,26 @@ u16 permissions_from_mode(mode_t mode) {
     return (owner << 6) | (group << 3) | others;
 }
 
-DirEntryType dir_entry_type_from_mode(mode_t mode) {
+u16 git_mode_from_stat(mode_t mode) {
+    if (S_ISDIR(mode))
+        return 040000;
+
+    if (S_ISLNK(mode))
+        return 0120000;
+
+    if (S_ISREG(mode)) {
+        u32 permissions = permissions_from_stat(mode);
+
+        if (permissions & 0100)
+            return 0100755;
+
+        return 0100644;
+    }
+
+    return 0;
+}
+
+DirEntryType dir_entry_type_from_stat(mode_t mode) {
     if (S_ISREG(mode))  return DIR_ENTRY_TYPE_FILE;
     if (S_ISDIR(mode))  return DIR_ENTRY_TYPE_DIR;
     if (S_ISLNK(mode))  return DIR_ENTRY_TYPE_SYMLINK;
@@ -56,8 +84,38 @@ DirEntryType dir_entry_type_from_mode(mode_t mode) {
     return DIR_ENTRY_TYPE_UNKNOWN;
 }
 
+const char *dir_entry_type_to_string(DirEntryType type) {
+    switch (type) {
+        case DIR_ENTRY_TYPE_DIR:        return "dir";
+        case DIR_ENTRY_TYPE_FILE:       return "file";
+        case DIR_ENTRY_TYPE_SYMLINK:    return "symlink";
+        case DIR_ENTRY_TYPE_UNKNOWN:    return "unknown";
+        default:
+            assert(false && "unreachable");
+    }
+}
 
-Result walk_dir(char *dir_path, DirWalkerFunc walker, StringBuilder *sb) {
+WalkContext walk_context_init(bool pre_order, StringBuilder *sb, void *cb_context) {
+    assert(sb != NULL);
+
+    WalkContext context = {0};
+    
+    context.pre_order = pre_order;
+    context.sb = sb;
+    context.cb_context = cb_context;
+
+    return context;
+}
+
+DirEntry dir_entry_init(char *path, mode_t mode) {
+    return (DirEntry) {
+        .path = path,
+        .git_mode = git_mode_from_stat(mode),
+        .type = dir_entry_type_from_stat(mode)
+    };
+}
+
+Result walk_dir(char *dir_path, DirWalkCallback callback, WalkContext context) {
     DIR *dir = opendir(dir_path); 
 
     if (dir == NULL) {
@@ -67,6 +125,17 @@ Result walk_dir(char *dir_path, DirWalkerFunc walker, StringBuilder *sb) {
     struct dirent *entry;
     struct stat file_stat;
     char full_path[1024] = {0};
+     
+    if (lstat(dir_path, &file_stat) == -1) {
+        closedir(dir);
+        return result_error("unable to stat directory");
+    }
+
+    DirEntry direntry = dir_entry_init(dir_path, file_stat.st_mode);
+
+    if(context.pre_order) {
+        callback(direntry, context.cb_context);
+    }
 
     while ((entry = readdir(dir)) != NULL) {
         if (strcmp(entry->d_name, ".") == 0 ||
@@ -80,25 +149,27 @@ Result walk_dir(char *dir_path, DirWalkerFunc walker, StringBuilder *sb) {
             continue; 
         }
 
-        DirEntryType type = dir_entry_type_from_mode(file_stat.st_mode);
-        u16 permissions = permissions_from_mode(file_stat.st_mode);
-        
-        sb_clear(sb);
-        sb_push_cstr(sb, full_path);
-        char *path = sb_collect(sb);
+        DirEntryType type = dir_entry_type_from_stat(file_stat.st_mode);
 
-        DirEntry direntry = {
-            .path = path,
-            .permissions = permissions,
-            .type = type 
-        };
-        walker(direntry);
-        free(path);
+        if(type != DIR_ENTRY_TYPE_DIR) {
+            sb_clear(context.sb);
+            sb_push_cstr(context.sb, full_path);
+            char *path = sb_collect(context.sb);
 
-        if(type == DIR_ENTRY_TYPE_DIR) {
-            Result result = walk_dir(full_path, walker, sb);
-            if(!result.ok) return result;
+            DirEntry direntry = dir_entry_init(path, file_stat.st_mode);
+
+            callback(direntry, context.cb_context);
+            free(path);
+
+            continue;
         }
+        
+        Result result = walk_dir(full_path, callback, context);
+        if(!result.ok) return result;
+    }
+
+    if(!context.pre_order) {
+        callback(direntry, context.cb_context);
     }
 
     closedir(dir);

@@ -15,7 +15,6 @@ Self *sb_new();
 
 void sb_push(Self *self, const char *content, usize size);
 void sb_push_cstr(Self *self, char *cstr);
-void sb_push_usize(Self *self, usize size);
 void sb_push_char(Self *self, char c);
 
 // @description collect the string into a cstr and clear the data of the builder
@@ -27,6 +26,14 @@ void sb_clear(Self *self);
 usize sb_len(Self *self);
 
 void sb_free(Self *self);
+
+#define sb_pushf(self, format, value) \
+    do { \
+        char buffer[1024] = {0}; \
+        sprintf(buffer, format, value); \
+        sb_push_cstr(self, buffer); \
+    } while(0)
+
 
 #ifdef STRING_IMPLEMENTATION_
 
@@ -69,12 +76,6 @@ void sb_push(Self *self, const char *content, usize size) {
 
     memcpy(self->content + self->len, content, size);
     self->len += size;
-}
-
-void sb_push_usize(Self *self, usize size) {
-    char buffer[256] = {0};
-    sprintf(buffer, "%zu", size);
-    return sb_push_cstr(self, buffer);
 }
 
 void sb_push_cstr(Self *self, char *cstr) {

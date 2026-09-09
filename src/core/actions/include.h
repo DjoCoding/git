@@ -5,10 +5,12 @@
 #	define HASH_FILE_ACTION_IMPLEMENTATION_
 #	define CAT_FILE_ACTION_IMPLEMENTATION_
 #	define LS_TREE_IMPLEMENTATION_
+#	define WRITE_TREE_IMPLEMENTATION_
 #endif
 
 #include "hash-file.h"
 #include "cat-file.h"
 #include "ls-tree.h"
+#include "write-tree.h"
 
 #endif // CORE_ACTIONS_H_

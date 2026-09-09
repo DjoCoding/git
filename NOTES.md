@@ -1,0 +1,1 @@
+- blob_hash needs to be reviewed: should first format the blob then hash the result

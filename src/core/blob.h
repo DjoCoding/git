@@ -20,9 +20,8 @@ Result blob_parse(StringView sv);
 // @description format the blob to its string format
 void blob_format(Self *self, StringBuilder *sb);
 
-// @description get the hash of the blob inside buffer
-// @return returns size of the buffer
-usize blob_hash(Self *self, char *buffer);
+// @description get the hash of the blob format
+void blob_hash__(Self *self, unsigned char hash_buffer[HASH_BYTES_SIZE], StringBuilder *sb);
 
 // @description load blob from file with zlib decompression
 // @return Result<Blob *>
@@ -100,7 +99,7 @@ Result blob_parse(StringView sv) {
 void blob_format(Self *self, StringBuilder *sb) {
     sb_clear(sb);
     sb_push_cstr(sb, "blob ");
-    sb_push_usize(sb, self->len);
+    sb_pushf(sb, "%zu", self->len);
     sb_push_char(sb, '\0');
     sb_push(sb, self->content, self->len);
 }
@@ -144,10 +143,15 @@ Result blob_write_to_file(Self *self, char *file_path, StringBuilder *sb) {
     return result_ok(NULL);
 }
 
-usize blob_hash(Self *self, char *buffer) {
-    StringView blob_sv = sv_init(self->content, self->len);
-    usize size = hash(blob_sv, buffer);
-    return size;
+void blob_hash__(Self *self, unsigned char hash_buffer[HASH_BYTES_SIZE], StringBuilder *sb) {
+    blob_format(self, sb);
+    usize blob_format_len = sb_len(sb);
+    char *blob_format_content = sb_collect(sb);
+    
+    StringView blob_sv = sv_init(blob_format_content, blob_format_len);
+    
+    hash__(blob_sv, hash_buffer);
+    free(blob_format_content);
 }
 
 void blob_free(Self *self) {

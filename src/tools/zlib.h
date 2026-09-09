@@ -23,7 +23,7 @@ Result zlib_decompress(const char *file_path, StringBuilder *sb) {
     
     FILE *file = fopen(file_path, "rb");
     if (file == NULL) {
-        return result_error("zlib failed, cannot open file");
+        return result_error("zlib failed to open file");
     }
 
     z_stream stream = {0};
@@ -50,7 +50,7 @@ Result zlib_decompress(const char *file_path, StringBuilder *sb) {
         if (ferror(file)) {
             inflateEnd(&stream);
             fclose(file);
-            return result_error("failed to read file");
+            return result_error("zlib failed to read file");
         }
 
         if (bytes_read == 0) {
@@ -111,7 +111,7 @@ Result zlib_decompress(const char *file_path, StringBuilder *sb) {
 Result zlib_compress_and_save(StringView content, const char *file_path) {
     FILE *file = fopen(file_path, "wb");
     if (file == NULL) {
-        return result_error("zlib failed, cannot open file");
+        return result_error("zlib failed to open file");
     }
 
     z_stream stream = {0};

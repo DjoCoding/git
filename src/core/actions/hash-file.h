@@ -1,15 +1,15 @@
-#ifndef HASH_FILE_H_
-#define HASH_FILE_H_
+#ifndef CORE_ACTIONS_HASH_FILE_H_
+#define CORE_ACTIONS_HASH_FILE_H_
 
 #include <lib/include.h>
 
 // @return Result<char *> (blob hash bytes char[HASH_BYTES_SIZE] as char *)
 Result hash_file(char *file_path, char *objects_dir_path, StringBuilder *sb);
 
-#ifdef HASH_FILE_ACTION_IMPLEMENTATION_
+#ifdef CORE_ACTIONS_HASH_FILE_IMPLEMENTATION_
 
 #include <tools/include.h>
-#include "../blob.h"
+#include <core/objects/blob.h>
 
 #include <string.h>
 
@@ -68,6 +68,6 @@ Result hash_file(char *file_path, char *objects_dir_path, StringBuilder *sb) {
     return result_ok(hash_bytes);
 }
 
-#endif // HASH_FILE_ACTION_IMPLEMENTATION_
+#endif // CORE_ACTIONS_HASH_FILE_IMPLEMENTATION_
 
-#endif // HASH_FILE_H_
+#endif // CORE_ACTIONS_HASH_FILE_H_

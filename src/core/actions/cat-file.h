@@ -1,14 +1,14 @@
-#ifndef CAT_FILE_H_
-#define CAT_FILE_H_
+#ifndef CORE_ACTIONS_CAT_FILE_H_
+#define CORE_ACTIONS_CAT_FILE_H_
 
 #include <lib/include.h>
 
 // @return Result<char *> (content of the blob)
 Result cat_file(char *cstr_hash, char *objects_dir_path, StringBuilder *sb);
 
-#ifdef CAT_FILE_ACTION_IMPLEMENTATION_
+#ifdef CORE_ACTIONS_CAT_FILE_IMPLEMENTATION_
 
-#include "../blob.h"
+#include <core/objects/blob.h>
 
 Result cat_file(char *cstr_hash, char *objects_dir_path, StringBuilder *sb) {
     usize hash_len = strlen(cstr_hash);
@@ -39,6 +39,6 @@ Result cat_file(char *cstr_hash, char *objects_dir_path, StringBuilder *sb) {
 }
 
 
-#endif // CAT_FILE_ACTION_IMPLEMENTATION_
+#endif // CORE_ACTIONS_CAT_FILE_IMPLEMENTATION_
 
-#endif // CAT_FILE_H_
+#endif // CORE_ACTIONS_CAT_FILE_H_

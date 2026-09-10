@@ -150,8 +150,9 @@ void blob_free(Self *self) {
     free(self);
 }
 
-#undef Self
 
 #endif // BLOB_IMPLEMENTATION_
+
+#undef Self
 
 #endif // _BLOB_H

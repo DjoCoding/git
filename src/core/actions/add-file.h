@@ -1,15 +1,17 @@
-#ifndef ADD_FILE_H_
-#define ADD_FILE_H_
+#ifndef CORE_ACTIONS_ADD_FILE_H_
+#define CORE_ACTIONS_ADD_FILE_H_
 
 #include <lib/include.h>
+#include <core/index.h>
 #include "hash-file.h"
 
+
 // @return Result<NULL>
-Result add(Index *index, char *path, char *objects_dir_path, StringBuilder *sb);
+Result add_file(Index *index, char *path, char *objects_dir_path, StringBuilder *sb);
 
 #include <tools/include.h>
 
-#ifdef ADD_FILE_IMPLEMENTATION_
+#ifdef CORE_ACTIONS_ADD_FILE_IMPLEMENTATION_
 
 // @description add a regular file to staging area
 // @return Result<NULL>
@@ -64,7 +66,7 @@ void add_dir_walker(DirEntry entry, void *ctx) {
 	fprintf(stderr, "ERROR: failed to add file %s, file type not supported yet\n", entry.path);
 }
 
-Result add(Index *index, char *path, char *objects_dir_path, StringBuilder *sb) {
+Result add_file(Index *index, char *path, char *objects_dir_path, StringBuilder *sb) {
 	FileInfo info = file_info(path);
 	if(!info.exists) return result_error("file does not exist");
 
@@ -92,6 +94,6 @@ Result add(Index *index, char *path, char *objects_dir_path, StringBuilder *sb) 
 	return result_error("unsupported file type");
 }
 
-#endif // ADD_FILE_IMPLEMENTATION_
+#endif // CORE_ACTIONS_ADD_FILE_IMPLEMENTATION_
 
-#endif // ADD_FILE_H_
+#endif // CORE_ACTIONS_ADD_FILE_H_

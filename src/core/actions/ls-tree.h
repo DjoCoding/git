@@ -1,5 +1,5 @@
-#ifndef LS_TREE_H_
-#define LS_TREE_H_
+#ifndef CORE_ACTIONS_LS_TREE_H_
+#define CORE_ACTIONS_LS_TREE_H_
 
 #include <lib/include.h>
 #include <stdbool.h>
@@ -7,7 +7,9 @@
 // @return Result<Tree *>
 Result ls_tree(char *cstr_hash, char *objects_dir_path, StringBuilder *sb);
 
-#ifdef LS_TREE_IMPLEMENTATION_
+#ifdef CORE_ACTIONS_LS_TREE_IMPLEMENTATION_
+
+#include <core/objects/tree.h>
 
 Result ls_tree(char *cstr_hash, char *objects_dir_path, StringBuilder *sb) {
     (void)objects_dir_path;
@@ -34,6 +36,6 @@ Result ls_tree(char *cstr_hash, char *objects_dir_path, StringBuilder *sb) {
 	return result_ok(tree);
 }
 
-#endif // LS_TREE_IMPLEMENTATION_
+#endif // CORE_ACTIONS_LS_TREE_IMPLEMENTATION_
 
-#endif // LS_TREE_H_
+#endif // CORE_ACTIONS_LS_TREE_H_

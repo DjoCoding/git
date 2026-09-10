@@ -14,25 +14,8 @@
 #define TOOLS_IMPLEMENTATION
 #include <tools/include.h>
 
-#include <core/constants.h>
-
-#define CORE_UTILS_IMPLEMENTATION
-#include <core/utils/include.h>
-
-#define BLOB_IMPLEMENTATION_
-#include <core/objects/blob.h>
-
-#define TREE_IMPLEMENTATION_
-#include <core/objects/tree.h>
-
-#define COMMIT_IMPLEMENTATION_
-#include <core/objects/commit.h>
-
-#define INDEX_IMPLEMENTATION_
-#include <core/index.h>
-
-#define CORE_ACTIONS_IMPLEMENTATION
-#include <core/actions/include.h>
+#define CORE_IMPLEMENTATION
+#include <core/include.h>
 
 void usage(FILE *f, char *prog_name, char *error) {
     char buffer[1024] = {0};
@@ -47,16 +30,16 @@ void usage(FILE *f, char *prog_name, char *error) {
 }
 
 typedef struct {
+    GitContext *git_context;
     char *file_path;
     StringBuilder *sb;
-    char *objects_dir_path;
 } HashFileCommandContext;
 
 // @command hash-file
 // @example hash-file src/main.c
 int hash_file_command(HashFileCommandContext context) {
     assert(context.file_path != NULL);
-    assert(context.objects_dir_path != NULL);
+    assert(context.git_context != NULL);
     assert(context.sb != NULL);
 
     FileInfo info = file_info(context.file_path);
@@ -65,7 +48,7 @@ int hash_file_command(HashFileCommandContext context) {
         return 1;
     }
 
-    Result result = hash_file(context.file_path, context.objects_dir_path, context.sb);
+    Result result = hash_file(context.file_path, context.git_context->paths.objects, context.sb);
     if(!result.ok) {
         const char *error = result.as.error;
         fprintf(stderr, "ERROR: failed to hash file, %s\n", error);
@@ -84,9 +67,9 @@ int hash_file_command(HashFileCommandContext context) {
 }
 
 typedef struct {
+    GitContext *git_context;
     char *cstr_hash;
     StringBuilder *sb;
-    char *objects_dir_path;
 } CatFileCommandContext;
 
 // @command cat-file
@@ -94,10 +77,10 @@ typedef struct {
 int cat_file_command(CatFileCommandContext context) {
     assert(context.cstr_hash != NULL);
 
-    assert(context.objects_dir_path != NULL);
+    assert(context.git_context != NULL);
     assert(context.sb != NULL);
 
-    Result result = cat_file(context.cstr_hash, context.objects_dir_path, context.sb);
+    Result result = cat_file(context.cstr_hash, context.git_context->paths.objects, context.sb);
     if(!result.ok) {
         const char *error = result.as.error;
         fprintf(stderr, "ERROR: %s\n", error);
@@ -117,8 +100,8 @@ typedef struct {
 } LsTreeCommandOptions;
 
 typedef struct {
+    GitContext *git_context;
     char *cstr_hash;
-    char *objects_dir_path;
     StringBuilder *sb;
     LsTreeCommandOptions options;
 } LsTreeCommandContext;
@@ -128,10 +111,10 @@ typedef struct {
 int ls_tree_command(LsTreeCommandContext context) {
     assert(context.cstr_hash != NULL);
     
-    assert(context.objects_dir_path != NULL);
+    assert(context.git_context != NULL);
     assert(context.sb != NULL);
 
-    Result result = ls_tree(context.cstr_hash, context.objects_dir_path, context.sb);
+    Result result = ls_tree(context.cstr_hash, context.git_context->paths.objects, context.sb);
     if(!result.ok) {
         const char *error = result.as.error;
         fprintf(stderr, "ERROR: %s\n", error);
@@ -167,7 +150,7 @@ int ls_tree_command(LsTreeCommandContext context) {
 }
 
 typedef struct {
-    char *objects_dir_path;
+    GitContext *git_context;
     char *dir_path;
     StringBuilder *sb;
 } WriteTreeCommandContext;
@@ -176,10 +159,10 @@ typedef struct {
 // @example write-tree <dir>
 int write_tree_command(WriteTreeCommandContext context) {
     assert(context.dir_path != NULL);
-    assert(context.objects_dir_path != NULL);
+    assert(context.git_context != NULL);
     assert(context.sb != NULL);
 
-    Result result = write_tree(context.dir_path, context.objects_dir_path, context.sb);
+    Result result = write_tree(context.dir_path, context.git_context->paths.objects, context.sb);
     if(!result.ok) {
         const char *error = result.as.error;
         fprintf(stderr, "ERROR: %s\n", error);
@@ -198,25 +181,17 @@ int write_tree_command(WriteTreeCommandContext context) {
 }
 
 typedef struct {
-    char *root_dir_path;
-    char *objects_dir_path;
-    char *refs_dir_path;
-    char *head_file_path;
+    GitContext *git_context;
 } InitCommandContext;
 
 // @command init
 // @example init
 int init_command(InitCommandContext context) {
-    assert(context.root_dir_path != NULL);
-    assert(context.objects_dir_path != NULL);
-    assert(context.refs_dir_path != NULL);
-    assert(context.head_file_path != NULL);
-
     Result result = init(
-        context.root_dir_path,
-        context.objects_dir_path,
-        context.refs_dir_path,
-        context.head_file_path
+        context.git_context->paths.root,
+        context.git_context->paths.objects,
+        context.git_context->paths.refs,
+        context.git_context->paths.head
     );
     if(!result.ok) {
         const char *error = result.as.error;
@@ -230,12 +205,7 @@ int init_command(InitCommandContext context) {
 }
 
 typedef struct {
-    char *tree_hash;
-    char *message;
-} CommitTreeCommandOptions;
-
-typedef struct {
-    char *objects_dir_path;
+    GitContext *git_context;
     char *tree_hash;
     char *message;
     StringBuilder *sb;
@@ -244,14 +214,14 @@ typedef struct {
 // @command commit-tree
 // @example commit-tree <tree_hash> -m[--message] <message>
 int commit_tree_command(CommitTreeCommandContext context) {
-    assert(context.objects_dir_path != NULL);
+    assert(context.git_context != NULL);
 
     assert(context.tree_hash != NULL);
 
     assert(context.message != NULL);
     assert(context.sb != NULL);
 
-    Result result = commit_tree(context.tree_hash, context.message, context.objects_dir_path, context.sb);
+    Result result = commit_tree(context.tree_hash, context.message, context.git_context->paths.objects, context.sb);
     if(!result.ok) {
         const char *error = result.as.error;
         fprintf(stderr, "ERROR: %s\n", error);
@@ -270,8 +240,7 @@ int commit_tree_command(CommitTreeCommandContext context) {
 }
 
 typedef struct {
-    char *index_file_path;
-    char *objects_dir_path;
+    GitContext *git_context;
     StringVec paths;
     StringBuilder *sb;
 } AddCommandContext;
@@ -279,11 +248,14 @@ typedef struct {
 // @command add
 // @example add <file1> <file2> ...
 int add_command(AddCommandContext context) {
+    assert(context.git_context != NULL);
+    assert(context.sb != NULL);
+
     Index *index = NULL;
 
-	bool exists = file_exists(context.index_file_path);
+	bool exists = file_exists(context.git_context->paths.index);
 	if(exists) {
-		Result load_index_result = index_load_from_file(context.index_file_path, context.sb);
+		Result load_index_result = index_load_from_file(context.git_context->paths.index, context.sb);
 		if(!load_index_result.ok) {
             const char *error = load_index_result.as.error;
             fprintf(stderr, "ERROR: failed to load index file, %s\n", error);
@@ -300,7 +272,7 @@ int add_command(AddCommandContext context) {
 	vec_foreach(context.paths, ppath) {
 		char *path = *ppath;
 		
-		Result result = add(index, path, context.objects_dir_path, context.sb);
+		Result result = add_file(index, path, context.git_context->paths.objects, context.sb);
 		if(!result.ok) {
             success = false;
 
@@ -311,7 +283,7 @@ int add_command(AddCommandContext context) {
         }
 	}
 
-    index_write_to_file(index, context.index_file_path, context.sb);
+    index_write_to_file(index, context.git_context->paths.index, context.sb);
     
     int code = success ? 0 : 1;
     return code;
@@ -323,7 +295,7 @@ typedef struct {
 } LsFilesCommandOptions;
 
 typedef struct {
-    char *index_file_path;
+    GitContext *git_context;
     StringBuilder *sb;
     LsFilesCommandOptions options;
 } LsFilesCommandContext;
@@ -331,10 +303,10 @@ typedef struct {
 // @command ls-files
 // @example ls-files {--name-only} {--object-only}
 int ls_files_command(LsFilesCommandContext context) {
-    Result result = ls_files(context.index_file_path, context.sb);
+    Result result = ls_files(context.git_context->paths.index, context.sb);
     if(!result.ok) {
         const char *error = result.as.error;
-        fprintf(stderr, "ERROR: failed to list staged files, %s\n", error);
+        fprintf(stderr, "ERROR: %s\n", error);
         return 1;
     }
 
@@ -347,7 +319,6 @@ int ls_files_command(LsFilesCommandContext context) {
             continue;
         }
 
-        
         if(context.options.object_only) {
             sb_clear(context.sb);
             char *hash = hash_to_text(e->blob_hash, context.sb);
@@ -370,6 +341,20 @@ int ls_files_command(LsFilesCommandContext context) {
     return 0;
 }
 
+typedef struct {
+    char *git_dir_path;
+    char *objects_dir_path;
+    char *index_file_path;
+    char *head_file_path;
+    char *message;
+    StringBuilder *sb;
+} CommitCommandContext;
+
+// @command commit
+// @example commit -m[--message] <message>
+
+
+char *GIT_DIR = "mygit";
 
 int main(int argc, char *argv[]) {
     int code = 0;
@@ -390,18 +375,57 @@ int main(int argc, char *argv[]) {
 
     const char *command = args_consume(&args);
 
+    // globals
     StringBuilder *sb = sb_new();
+    GitContext *git_context = git_context_init(GIT_DIR, sb);
 
     if (strcmp(command, "init") == 0) {
-        InitCommandContext context = {
-            .root_dir_path = GIT_DIR,
-            .objects_dir_path = GIT_OBJECTS_DIR,
-            .refs_dir_path = GIT_REFS_DIR,
-            .head_file_path = GIT_HEAD_FILE
-        };
-
+        InitCommandContext context = {.git_context = git_context};
         code = init_command(context);
-    } else if (strcmp(command, "ls-files") == 0) {
+        goto cleanup_and_exit;
+    }
+    
+    if (strcmp(command, "commit") == 0) {
+        char *message = NULL;
+
+        while(!args_end(args)) {
+            char *arg = args_consume(&args);
+            StringView arg_sv = sv_from_cstr(arg);
+
+            if(sv_starts_with(arg_sv, sv_from_cstr("-"))) {
+                if(
+                    sv_eq(arg_sv, sv_from_cstr("-m")) ||
+                    sv_eq(arg_sv, sv_from_cstr("--message")) 
+                ) {
+                    if(message != NULL) {
+                        fprintf(stderr, "ERROR: can only provide one commit message\n");
+                        goto cleanup_and_error;
+                    }
+
+                    if(args_end(args)) {
+                        fprintf(stderr, "ERROR: expected commit message\n");
+                        goto cleanup_and_error;
+                    }
+
+                    message = args_consume(&args);
+                    continue;
+                }
+
+                fprintf(stderr, "ERROR: invalid option %s\n", arg);
+                goto cleanup_and_error;
+            }
+        }
+
+        if(message == NULL) {
+            fprintf(stderr, "ERROR: must provide commit message\n");
+            goto cleanup_and_error;
+        }
+
+        code = 1;
+        goto cleanup_and_exit;
+    }
+    
+    if (strcmp(command, "ls-files") == 0) {
         LsFilesCommandOptions options = {
             .name_only = false,
             .object_only = false
@@ -441,15 +465,18 @@ int main(int argc, char *argv[]) {
         }
 
         LsFilesCommandContext context = {
-            .index_file_path = GIT_INDEX_FILE,
+            .git_context = git_context,
             .sb = sb,
             .options = options
         };
 
         code = ls_files_command(context);
-    } else if (strcmp(command, "add") == 0) {
+        goto cleanup_and_exit;
+    } 
+    
+    if (strcmp(command, "add") == 0) {
         if(args_end(args)) {
-            fprintf(stderr, "ERROR: expected file paths\n");
+            fprintf(stderr, "ERROR: no file provided\n");
             goto cleanup_and_error;
         }
 
@@ -465,17 +492,22 @@ int main(int argc, char *argv[]) {
 
             vec_push(paths, arg);
         }
+        assert(paths.len != 0);
 
         AddCommandContext context = {
-            .index_file_path = GIT_INDEX_FILE,
-            .objects_dir_path = GIT_OBJECTS_DIR,
+            .git_context = git_context,
             .paths = paths,
             .sb = sb
         };
 
         code = add_command(context);
-    } else if (strcmp(command, "commit-tree") == 0) {
-        CommitTreeCommandOptions options = {0};
+        goto cleanup_and_exit;
+    } 
+    
+    
+    if (strcmp(command, "commit-tree") == 0) {
+        char *message = NULL;
+        char *tree_hash = NULL;
 
         while(!args_end(args)) {
             char *arg = args_consume(&args);
@@ -486,7 +518,7 @@ int main(int argc, char *argv[]) {
                     sv_eq(arg_sv, sv_from_cstr("-m")) ||
                     sv_eq(arg_sv, sv_from_cstr("--message")) 
                 ) {
-                    if(options.message != NULL) {
+                    if(message != NULL) {
                         fprintf(stderr, "ERROR: can only provide one commit message\n");
                         goto cleanup_and_error;
                     }
@@ -496,9 +528,7 @@ int main(int argc, char *argv[]) {
                         goto cleanup_and_error;
                     }
 
-                    char *message = args_consume(&args);
-                    options.message = message;
-
+                    message = args_consume(&args);
                     continue;
                 }
 
@@ -506,39 +536,42 @@ int main(int argc, char *argv[]) {
                 goto cleanup_and_error;
             }
 
-            if(options.tree_hash != NULL) {
+            if(tree_hash != NULL) {
                 fprintf(stderr, "ERROR: can only provide one tree hash\n");
                 goto cleanup_and_error;
             } 
 
-            options.tree_hash = arg;
+            tree_hash = arg;
         }
 
-        if(options.tree_hash == NULL) {
+        if(tree_hash == NULL) {
             fprintf(stderr, "ERROR: must provide tree hash\n");
             goto cleanup_and_error;
         }
 
-        usize tree_hash_len = strlen(options.tree_hash);
+        usize tree_hash_len = strlen(tree_hash);
         if(tree_hash_len != HASH_TEXT_SIZE) {
             fprintf(stderr, "ERROR: invalid tree hash format\n");
             goto cleanup_and_error;
         }
 
-        if(options.message == NULL) {
+        if(message == NULL) {
             fprintf(stderr, "ERROR: must provide commit message\n");
             goto cleanup_and_error;
         }
 
         CommitTreeCommandContext context = {
-            .objects_dir_path = GIT_OBJECTS_DIR,
-            .tree_hash = options.tree_hash,
-            .message = options.message,
+            .git_context = git_context,
+            .tree_hash = tree_hash,
+            .message = message,
             .sb = sb
         };
 
         code = commit_tree_command(context);
-    } else if (strcmp(command, "write-tree") == 0) {
+        goto cleanup_and_exit;
+    } 
+    
+    if (strcmp(command, "write-tree") == 0) {
         if(args_end(args)) {
             usage(stderr, prog_name, "expected directory arg");
             goto cleanup_and_error;
@@ -547,13 +580,16 @@ int main(int argc, char *argv[]) {
         char *dir_path = args_consume(&args);
 
         WriteTreeCommandContext context = {
+            .git_context = git_context,
             .dir_path = dir_path,
-            .objects_dir_path = GIT_OBJECTS_DIR,
             .sb = sb
         };
 
         code = write_tree_command(context);
-    } else if (strcmp(command, "ls-tree") == 0) {
+        goto cleanup_and_exit;
+    } 
+    
+    if (strcmp(command, "ls-tree") == 0) {
         LsTreeCommandOptions options = {
             .name_only = false,
             .object_only = false
@@ -609,14 +645,17 @@ int main(int argc, char *argv[]) {
         }
 
         LsTreeCommandContext context = {
+            .git_context = git_context,
             .cstr_hash = tree_hash,
-            .objects_dir_path = GIT_OBJECTS_DIR,
             .options = options,
             .sb = sb
         };
 
         code = ls_tree_command(context);
-    } else if (strcmp(command, "hash-file") == 0) {
+        goto cleanup_and_exit;
+    } 
+    
+    if (strcmp(command, "hash-file") == 0) {
         if(args_end(args)) {
             usage(stderr, prog_name, "expected file path");
             goto cleanup_and_error;
@@ -625,13 +664,16 @@ int main(int argc, char *argv[]) {
         char *file_path = args_consume(&args);
         
         HashFileCommandContext context = {
+            .git_context = git_context,
             .file_path = file_path,
             .sb = sb,
-            .objects_dir_path = GIT_OBJECTS_DIR
         };
 
         code = hash_file_command(context);
-    } else if (strcmp(command, "cat-file") == 0) {
+        goto cleanup_and_exit;
+    } 
+    
+    if (strcmp(command, "cat-file") == 0) {
         if(args_end(args)) {
             usage(stderr, prog_name, "expected -p flag to specify the blob hash");
             goto cleanup_and_error;
@@ -656,25 +698,26 @@ int main(int argc, char *argv[]) {
         }
 
         CatFileCommandContext context = {
+            .git_context = git_context,
             .cstr_hash = object_hash,
-            .objects_dir_path = GIT_OBJECTS_DIR,
             .sb = sb
         };
 
         code = cat_file_command(context);
-    } else {
-        fprintf(stderr, "Unknown command %s\n", command);
-        goto cleanup_and_error;
-    }
+        goto cleanup_and_exit;
+    } 
 
-    // indicator for error
-    if(code == 1) {
-        goto cleanup_and_error;
-    }
 
-    return 0;
+    fprintf(stderr, "Unknown command %s\n", command);
+    goto cleanup_and_error;    
+
+cleanup_and_exit:
+    sb_free(sb);
+    git_context_free(git_context);
+    return code;
 
 cleanup_and_error:
     sb_free(sb);
+    git_context_free(git_context);
     return 1;
 }

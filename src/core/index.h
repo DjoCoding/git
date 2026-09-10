@@ -1,5 +1,5 @@
-#ifndef INDEX_H_
-#define INDEX_H_
+#ifndef CORE_INDEX_H_
+#define CORE_INDEX_H_
 
 #include <lib/include.h>
 
@@ -53,7 +53,7 @@ void index_entry_copy(IndexEntry *dest, IndexEntry src);
 
 void index_free(Self *self);
 
-#ifdef INDEX_IMPLEMENTATION_
+#ifdef CORE_INDEX_IMPLEMENTATION_
 
 #include <tools/include.h>
 #include <assert.h>
@@ -407,8 +407,8 @@ void index_free(Self *self) {
 
 
 
-#endif  // INDEX_IMPLEMENTATION_
+#endif  // CORE_INDEX_IMPLEMENTATION_
 
 #undef Self
 
-#endif // INDEX_H_
+#endif // CORE_INDEX_H_

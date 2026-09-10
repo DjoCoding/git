@@ -1,5 +1,5 @@
-#ifndef COMMIT_TREE_H_
-#define COMMIT_TREE_H_
+#ifndef CORE_ACTIONS_COMMIT_TREE_H_
+#define CORE_ACTIONS_COMMIT_TREE_H_
 
 #include <lib/include.h>
 
@@ -11,7 +11,7 @@ Result commit_tree(
 	StringBuilder *sb
 );
 
-#ifdef COMMIT_TREE_IMPLEMENTATION_
+#ifdef CORE_ACTIONS_COMMIT_TREE_IMPLEMENTATION_
 
 #include <core/objects/commit.h>
 #include <core/utils/include.h>
@@ -69,4 +69,4 @@ Result commit_tree(
 
 #endif
 
-#endif // COMMIT_TREE_H_
+#endif // CORE_ACTIONS_COMMIT_TREE_H_

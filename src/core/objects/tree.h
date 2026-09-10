@@ -39,6 +39,8 @@ TreeEntry tree_entry_init(u16 mode, char *file_name, unsigned char hash[HASH_BYT
 // @description performs a - b
 int tree_entry_compare(TreeEntry a, TreeEntry b);
 
+void tree_free(Self *self);
+
 #ifdef TREE_IMPLEMENTATION_
 
 #include <string.h>
@@ -60,10 +62,6 @@ Self *tree_new() {
 	*self = (Tree){0};
 	
 	return self;
-}
-
-void tree_push_entry(Self *self, TreeEntry entry) {
-	vec_push(*self, entry);
 }
 
 TreeEntry tree_entry_init(u16 mode, char *file_name, unsigned char hash[HASH_BYTES_SIZE]) {
@@ -214,7 +212,7 @@ Result tree_parse(StringView tree_content) {
 			tree_free(tree);
 			return result_error("invalid tree format");
 		}
-		tree_push_entry(tree, entry);
+		vec_push(*tree, entry);
 	}); 
 
 	return result_ok(tree);

@@ -1,5 +1,5 @@
-#ifndef WRITE_TREE_H_
-#define WRITE_TREE_H_
+#ifndef CORE_ACTIONS_WRITE_TREE_H_
+#define CORE_ACTIONS_WRITE_TREE_H_
 
 #include <lib/include.h>
 #include <tools/include.h>
@@ -20,7 +20,7 @@ typedef struct {
 // @return Result<char *> (hash bytes unsigned char[HASH_BYTES_SIZE])
 Result write_tree(char *dir_path, char *objects_dir_path, StringBuilder *sb);
 
-#ifdef WRITE_TREE_IMPLEMENTATION_
+#ifdef CORE_ACTIONS_WRITE_TREE_IMPLEMENTATION_
 
 #include <assert.h>
 #include <string.h>
@@ -98,7 +98,7 @@ void write_tree_walker(DirEntry entry, void *ctx) {
             free(path);
 
             // here we know that the child is a direct child of the dir
-            tree_push_entry(tree, entry);
+            vec_push(*tree, entry);
         }
         vec_sort(TreeEntry, *tree, tree_entry_compare);
 
@@ -198,7 +198,7 @@ Result write_tree(char *dir_path, char *objects_dir_path, StringBuilder *sb) {
 }
 
 
-#endif // WRITE_TREE_IMPLEMENTATION_
+#endif // CORE_ACTIONS_WRITE_TREE_IMPLEMENTATION_
 
 
-#endif // WRITE_TREE_H_
+#endif // CORE_ACTIONS_WRITE_TREE_H_

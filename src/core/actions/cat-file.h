@@ -1,7 +1,7 @@
 #ifndef CAT_FILE_H_
 #define CAT_FILE_H_
 
-#include "../../lib/include.h"
+#include <lib/include.h>
 
 // @return Result<char *> (content of the blob)
 Result cat_file(char *cstr_hash, char *objects_dir_path, StringBuilder *sb);

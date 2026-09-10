@@ -1,9 +1,9 @@
 #ifndef WRITE_TREE_H_
 #define WRITE_TREE_H_
 
-#include "../../lib/include.h"
-#include "../../tools/include.h"
-#include "../tree.h"
+#include <lib/include.h>
+#include <tools/include.h>
+#include <core/objects/tree.h>
 
 #include "hash-file.h"
 
@@ -44,7 +44,7 @@ WriteTreeDirWalkCallbackContext write_tree_dir_walk_callback_context_init(String
 void write_tree_walker(DirEntry entry, void *ctx) {
     WriteTreeDirWalkCallbackContext *context = (WriteTreeDirWalkCallbackContext *)ctx;
     
-    if(entry.type == DIR_ENTRY_TYPE_FILE) {
+    if(entry.type == FILE_TYPE_REGULAR) {
         Result result = hash_file(entry.path, context->objects_dir_path, context->sb);
         if(!result.ok) {
             const char *error = result.as.error;
@@ -56,17 +56,17 @@ void write_tree_walker(DirEntry entry, void *ctx) {
         char *hash_bytes = (char *)result.as.data;
 
         TreeEntry item = tree_entry_init(
-            entry.git_mode, 
-            sv_from_cstr(entry.path), 
-            sv_init(hash_bytes, HASH_BYTES_SIZE)
+            git_mode_from_stat(entry.mode),
+            entry.path,
+            (unsigned char *)hash_bytes
         );
 
-        vec_append(context->tree_entries, item);
+        vec_push(context->tree_entries, item);
 
         return;
     }
 
-    if(entry.type == DIR_ENTRY_TYPE_DIR) {
+    if(entry.type == FILE_TYPE_DIR) {
         StringView dir_path_sv = sv_from_cstr(entry.path);
 
         Tree *tree = tree_new();
@@ -86,11 +86,16 @@ void write_tree_walker(DirEntry entry, void *ctx) {
                 continue;
             }
 
+            sb_clear(context->sb);
+            sb_push_sv(context->sb, child_relative_path);
+            char *path = sb_collect(context->sb);
+
             TreeEntry entry = tree_entry_init(
                 item.mode,
-                child_relative_path,
-                sv_init((char *)item.hash, HASH_BYTES_SIZE)
+                path,
+                item.hash
             );
+            free(path);
 
             // here we know that the child is a direct child of the dir
             tree_push_entry(tree, entry);
@@ -101,7 +106,7 @@ void write_tree_walker(DirEntry entry, void *ctx) {
         // we can construct the current dir entry tree
 
         unsigned char hash_buffer[HASH_BYTES_SIZE] = {0};
-        tree_hash__(tree, hash_buffer, context->sb);
+        tree_hash(tree, hash_buffer, context->sb);
 
         char *hash = hash_to_text(hash_buffer, context->sb);
         usize hash_len = strlen(hash);
@@ -143,17 +148,17 @@ void write_tree_walker(DirEntry entry, void *ctx) {
         tree_free(tree);
 
         TreeEntry item = tree_entry_init(
-            entry.git_mode,
-            sv_from_cstr(entry.path),
-            sv_init((char *)hash_buffer, HASH_BYTES_SIZE)
+            git_mode_from_stat(entry.mode),
+            entry.path,
+            hash_buffer
        );
 
-        vec_append(context->tree_entries, item);
+        vec_push(context->tree_entries, item);
         
         return;
     }
 
-    fprintf(stderr, "ERROR: file \"%s\" who's type \"%s\" is not supported yet.\n", entry.path, dir_entry_type_to_string(entry.type));
+    fprintf(stderr, "ERROR: file \"%s\" who's type \"%s\" is not supported yet.\n", entry.path, file_type_to_string(entry.type));
     return;
 }
 
@@ -170,11 +175,10 @@ Result write_tree(char *dir_path, char *objects_dir_path, StringBuilder *sb) {
 
     TreeEntry *dir_entry = NULL; 
 
-    TreeEntry *p = NULL;
-    vec_foreach(context.tree_entries, p) {
-        TreeEntry i = *p;
-        if(sv_eq(sv_from_cstr(i.file_name), sv_from_cstr(dir_path))) {
-            dir_entry = p;
+    TreeEntry *e = NULL;
+    vec_foreach(context.tree_entries, e) {
+        if(sv_eq(sv_from_cstr(e->file_name), sv_from_cstr(dir_path))) {
+            dir_entry = e;
             break;
         }
     }
@@ -184,10 +188,9 @@ Result write_tree(char *dir_path, char *objects_dir_path, StringBuilder *sb) {
     sb_push(sb, (char *)dir_entry->hash, HASH_BYTES_SIZE);
     char *hash_bytes = sb_collect(sb);
 
-    p = NULL;
-    vec_foreach(context.tree_entries, p) {
-        TreeEntry i = *p;
-        free(i.file_name);
+    e = NULL;
+    vec_foreach(context.tree_entries, e) {
+        free(e->file_name);
     }
     vec_free(context.tree_entries);
 

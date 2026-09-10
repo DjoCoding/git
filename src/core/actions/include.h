@@ -8,6 +8,8 @@
 #	define WRITE_TREE_IMPLEMENTATION_
 #	define INIT_IMPLEMENTATION_
 #	define COMMIT_TREE_IMPLEMENTATION_
+#	define ADD_FILE_IMPLEMENTATION_
+#	define LS_FILES_IMPLEMENTATION_
 #endif
 
 #include "hash-file.h"
@@ -16,5 +18,7 @@
 #include "write-tree.h"
 #include "init.h"
 #include "commit-tree.h"
+#include "add-file.h"
+#include "ls-files.h"
 
 #endif // CORE_ACTIONS_H_

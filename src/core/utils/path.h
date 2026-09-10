@@ -1,7 +1,7 @@
 #ifndef PATH_H_
 #define PATH_H_
 
-#include "../../lib/include.h"
+#include <lib/include.h>
 
 char *object_dir_path_format(char *objects_dir_path, char *object_hash_text, StringBuilder *sb);
 char *object_full_path_format(char *objects_dir_path, char *object_hash_text, StringBuilder *sb);

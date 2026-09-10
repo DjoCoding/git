@@ -9,31 +9,30 @@
 #include <stdint.h>
 
 #define LIB_IMPLEMENTATION
-#include "lib/include.h"
+#include <lib/include.h>
 
 #define TOOLS_IMPLEMENTATION
-#include "tools/include.h"
+#include <tools/include.h>
+
+#include <core/constants.h>
 
 #define CORE_UTILS_IMPLEMENTATION
-#include "core/utils/include.h"
+#include <core/utils/include.h>
 
 #define BLOB_IMPLEMENTATION_
-#include "core/blob.h"
+#include <core/objects/blob.h>
 
 #define TREE_IMPLEMENTATION_
-#include "core/tree.h"
+#include <core/objects/tree.h>
 
 #define COMMIT_IMPLEMENTATION_
-#include "core/commit.h"
+#include <core/objects/commit.h>
+
+#define INDEX_IMPLEMENTATION_
+#include <core/index.h>
 
 #define CORE_ACTIONS_IMPLEMENTATION
-#include "core/actions/include.h"
-
-#define GIT_DIR "mygit"
-
-char *GIT_OBJECTS_DIR = GIT_DIR "/objects";
-char *GIT_REFS_DIR = GIT_DIR "/refs";
-char *GIT_HEAD_FILE = GIT_DIR "/HEAD";
+#include <core/actions/include.h>
 
 void usage(FILE *f, char *prog_name, char *error) {
     char buffer[1024] = {0};
@@ -60,16 +59,20 @@ int hash_file_command(HashFileCommandContext context) {
     assert(context.objects_dir_path != NULL);
     assert(context.sb != NULL);
 
+    FileInfo info = file_info(context.file_path);
+    if(info.type != FILE_TYPE_REGULAR) {
+        fprintf(stderr, "ERROR: failed to hash file, invalid file type %s\n", file_type_to_string(info.type));
+        return 1;
+    }
+
     Result result = hash_file(context.file_path, context.objects_dir_path, context.sb);
     if(!result.ok) {
         const char *error = result.as.error;
-        fprintf(stderr, "ERROR: %s\n", error);
+        fprintf(stderr, "ERROR: failed to hash file, %s\n", error);
         return 1;
     }
 
     char *hash_bytes = result.as.data;
-    ASSERT_CSTR_IS_HASH_BYTES(hash_bytes);
-
     char *hash_text = hash_to_text((unsigned char *)hash_bytes, context.sb);
 
     fprintf(stdout, "%s\n", hash_text);
@@ -90,8 +93,7 @@ typedef struct {
 // @example cat-file -p <blob_hash>
 int cat_file_command(CatFileCommandContext context) {
     assert(context.cstr_hash != NULL);
-    ASSERT_CSTR_IS_HASH_TEXT(context.cstr_hash);
-    
+
     assert(context.objects_dir_path != NULL);
     assert(context.sb != NULL);
 
@@ -110,17 +112,21 @@ int cat_file_command(CatFileCommandContext context) {
 }
 
 typedef struct {
+    bool name_only;
+    bool object_only;
+} LsTreeCommandOptions;
+
+typedef struct {
     char *cstr_hash;
     char *objects_dir_path;
     StringBuilder *sb;
-    LsTreeOptions options;
+    LsTreeCommandOptions options;
 } LsTreeCommandContext;
 
 // @command ls-tree
-// @example ls-tree <tree_hash>
+// @example ls-tree <tree_hash> {--name-only} {--object-only}
 int ls_tree_command(LsTreeCommandContext context) {
     assert(context.cstr_hash != NULL);
-    ASSERT_CSTR_IS_HASH_TEXT(context.cstr_hash);
     
     assert(context.objects_dir_path != NULL);
     assert(context.sb != NULL);
@@ -134,7 +140,7 @@ int ls_tree_command(LsTreeCommandContext context) {
 
     Tree *tree = (Tree *)result.as.data;
 
-    LsTreeOptions options = context.options;
+    LsTreeCommandOptions options = context.options;
 
     TreeEntry *p = NULL;
     vec_foreach(*tree, p) {
@@ -181,7 +187,6 @@ int write_tree_command(WriteTreeCommandContext context) {
     } 
 
     char *hash_bytes = result.as.data;
-    ASSERT_CSTR_IS_HASH_BYTES(hash_bytes);
 
     char *hash_text = hash_to_text((unsigned char *)hash_bytes, context.sb);
     fprintf(stdout, "%s\n", hash_text);
@@ -227,7 +232,7 @@ int init_command(InitCommandContext context) {
 typedef struct {
     char *tree_hash;
     char *message;
-} CommitTreeOptions;
+} CommitTreeCommandOptions;
 
 typedef struct {
     char *objects_dir_path;
@@ -242,7 +247,6 @@ int commit_tree_command(CommitTreeCommandContext context) {
     assert(context.objects_dir_path != NULL);
 
     assert(context.tree_hash != NULL);
-    ASSERT_CSTR_IS_HASH_TEXT(context.tree_hash);
 
     assert(context.message != NULL);
     assert(context.sb != NULL);
@@ -255,7 +259,6 @@ int commit_tree_command(CommitTreeCommandContext context) {
     }
 
     char *hash_bytes = result.as.data;
-    ASSERT_CSTR_IS_HASH_BYTES(hash_bytes);
 
     char *hash_text = hash_to_text((unsigned char *)hash_bytes, context.sb);
     fprintf(stdout, "%s\n", hash_text);
@@ -263,6 +266,107 @@ int commit_tree_command(CommitTreeCommandContext context) {
     free(hash_bytes);
     free(hash_text);
 
+    return 0;
+}
+
+typedef struct {
+    char *index_file_path;
+    char *objects_dir_path;
+    StringVec paths;
+    StringBuilder *sb;
+} AddCommandContext;
+
+// @command add
+// @example add <file1> <file2> ...
+int add_command(AddCommandContext context) {
+    Index *index = NULL;
+
+	bool exists = file_exists(context.index_file_path);
+	if(exists) {
+		Result load_index_result = index_load_from_file(context.index_file_path, context.sb);
+		if(!load_index_result.ok) {
+            const char *error = load_index_result.as.error;
+            fprintf(stderr, "ERROR: failed to load index file, %s\n", error);
+            return 1;
+        }
+		index = (Index *)load_index_result.as.data;
+	} else {
+		index = index_new();
+	}
+
+    bool success = true;
+	
+    char **ppath = NULL;
+	vec_foreach(context.paths, ppath) {
+		char *path = *ppath;
+		
+		Result result = add(index, path, context.objects_dir_path, context.sb);
+		if(!result.ok) {
+            success = false;
+
+            const char *error = result.as.error;
+            fprintf(stderr, "ERROR: failed to add file %s, %s\n", path, error);
+            
+            continue;
+        }
+	}
+
+    index_write_to_file(index, context.index_file_path, context.sb);
+    
+    int code = success ? 0 : 1;
+    return code;
+}
+
+typedef struct {
+    bool name_only;
+    bool object_only;
+} LsFilesCommandOptions;
+
+typedef struct {
+    char *index_file_path;
+    StringBuilder *sb;
+    LsFilesCommandOptions options;
+} LsFilesCommandContext;
+
+// @command ls-files
+// @example ls-files {--name-only} {--object-only}
+int ls_files_command(LsFilesCommandContext context) {
+    Result result = ls_files(context.index_file_path, context.sb);
+    if(!result.ok) {
+        const char *error = result.as.error;
+        fprintf(stderr, "ERROR: failed to list staged files, %s\n", error);
+        return 1;
+    }
+
+    Index *index = (Index *)result.as.data;
+
+    IndexEntry *e = NULL;
+    vec_foreach(*index, e) {
+        if(context.options.name_only) {
+            fprintf(stdout, "%s\n", e->file_path);
+            continue;
+        }
+
+        
+        if(context.options.object_only) {
+            sb_clear(context.sb);
+            char *hash = hash_to_text(e->blob_hash, context.sb);
+            
+            fprintf(stdout, "%s\n", hash);
+            
+            free(hash);
+            continue;
+        }
+
+        sb_clear(context.sb);
+        char *hash = hash_to_text(e->blob_hash, context.sb);
+        
+        fprintf(stdout, "%s %u %s\n", e->file_path, e->file_size, hash);
+        
+        free(hash);
+    }
+
+    index_free(index);
     return 0;
 }
 
@@ -297,8 +401,81 @@ int main(int argc, char *argv[]) {
         };
 
         code = init_command(context);
+    } else if (strcmp(command, "ls-files") == 0) {
+        LsFilesCommandOptions options = {
+            .name_only = false,
+            .object_only = false
+        };
+
+        while(!args_end(args)) {
+            char *arg = args_consume(&args);
+            StringView arg_sv = sv_from_cstr(arg);
+
+            if(sv_starts_with(arg_sv, sv_from_cstr("--"))) {
+                if(sv_eq(arg_sv, sv_from_cstr("--name-only"))) {
+                    if(options.object_only) {
+                        fprintf(stderr, "ERROR: cannot set --name-only as --objects-only is already set\n");
+                        goto cleanup_and_error;
+                    }
+
+                    options.name_only = true;
+                    continue;
+                }
+
+                if(sv_eq(arg_sv, sv_from_cstr("--object-only"))) {
+                    if(options.object_only) {
+                        fprintf(stderr, "ERROR: cannot set --objects-only as --name-only is already set\n");
+                        goto cleanup_and_error;
+                    }
+
+                    options.object_only = true; 
+                    continue;
+                }
+
+                fprintf(stderr, "ERROR: invalid flag %s\n", arg);
+                goto cleanup_and_error;
+            }
+            
+            fprintf(stderr, "ERROR: invalid option %s\n", arg);
+            goto cleanup_and_error;
+        }
+
+        LsFilesCommandContext context = {
+            .index_file_path = GIT_INDEX_FILE,
+            .sb = sb,
+            .options = options
+        };
+
+        code = ls_files_command(context);
+    } else if (strcmp(command, "add") == 0) {
+        if(args_end(args)) {
+            fprintf(stderr, "ERROR: expected file paths\n");
+            goto cleanup_and_error;
+        }
+
+        StringVec paths = {0};
+        while(!args_end(args)) {
+            char *arg = args_consume(&args);
+            
+            if(sv_starts_with(sv_from_cstr(arg), sv_from_cstr("-"))) {
+                fprintf(stderr, "ERROR: invalid option %s\n", arg);
+                free(paths.items);
+                goto cleanup_and_error;
+            }
+
+            vec_push(paths, arg);
+        }
+
+        AddCommandContext context = {
+            .index_file_path = GIT_INDEX_FILE,
+            .objects_dir_path = GIT_OBJECTS_DIR,
+            .paths = paths,
+            .sb = sb
+        };
+
+        code = add_command(context);
     } else if (strcmp(command, "commit-tree") == 0) {
-        CommitTreeOptions options = {0};
+        CommitTreeCommandOptions options = {0};
 
         while(!args_end(args)) {
             char *arg = args_consume(&args);
@@ -325,7 +502,7 @@ int main(int argc, char *argv[]) {
                     continue;
                 }
 
-                fprintf(stderr, "ERROR: invalid arg %s\n", arg);
+                fprintf(stderr, "ERROR: invalid option %s\n", arg);
                 goto cleanup_and_error;
             }
 
@@ -377,7 +554,7 @@ int main(int argc, char *argv[]) {
 
         code = write_tree_command(context);
     } else if (strcmp(command, "ls-tree") == 0) {
-        LsTreeOptions options = {
+        LsTreeCommandOptions options = {
             .name_only = false,
             .object_only = false
         };

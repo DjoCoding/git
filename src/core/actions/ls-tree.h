@@ -1,13 +1,8 @@
 #ifndef LS_TREE_H_
 #define LS_TREE_H_
 
-#include "../../lib/include.h"
+#include <lib/include.h>
 #include <stdbool.h>
-
-typedef struct {
-	bool name_only;
-	bool object_only;
-} LsTreeOptions;
 
 // @return Result<Tree *>
 Result ls_tree(char *cstr_hash, char *objects_dir_path, StringBuilder *sb);

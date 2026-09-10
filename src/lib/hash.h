@@ -2,26 +2,20 @@
 #define HASH_H_
 
 #include <openssl/evp.h>
-#include "types.h"
+#include <types.h>
 
 #define HASH_BYTES_SIZE 32
 #define HASH_TEXT_SIZE EVP_MAX_MD_SIZE 
 typedef unsigned char Hash[HASH_BYTES_SIZE];
 
 // @description implementation of SHA-256 using openssl/evp
-void hash__(StringView sv, unsigned char output_hash_buffer[HASH_BYTES_SIZE]);
+void hash(char *buffer, usize buffer_size, unsigned char output_hash_buffer[HASH_BYTES_SIZE]);
 
 // @description get the representation of the hash bytes as text
 char *hash_to_text(unsigned char hash_buffer[HASH_BYTES_SIZE], StringBuilder *sb);
 
 #include <string.h>
 #include <stdio.h>
-
-#define ASSERT_CSTR_IS_HASH_BYTES(cstr) \
-    do { \
-        size_t size = strlen(cstr); \
-        assert(size == HASH_BYTES_SIZE); \
-    } while(0)
 
 #define ASSERT_CSTR_IS_HASH_TEXT(cstr) \
     do { \
@@ -33,13 +27,13 @@ char *hash_to_text(unsigned char hash_buffer[HASH_BYTES_SIZE], StringBuilder *sb
 
 #include <string.h>
 
-void hash__(StringView sv, unsigned char output_hash_buffer[HASH_BYTES_SIZE]) {
+void hash(char *buffer, usize buffer_size, unsigned char output_hash_buffer[HASH_BYTES_SIZE]) {
     EVP_MD_CTX *context = EVP_MD_CTX_new();
     unsigned int internal_length;
 
     // Initialize, update with data, and finalize the hash state
     EVP_DigestInit_ex(context, EVP_sha256(), NULL);
-    EVP_DigestUpdate(context, sv.content, sv.len);
+    EVP_DigestUpdate(context, buffer, buffer_size);
     EVP_DigestFinal_ex(context, output_hash_buffer, &internal_length);
 
     EVP_MD_CTX_free(context);

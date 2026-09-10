@@ -10,7 +10,12 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#define vec_append(v, i) \
+#define Vec(T) \
+	T 		*items; \
+	size_t 	len; \
+	size_t	cap;
+
+#define vec_push(v, i) \
 	do { \
 		if((v).len >= (v).cap) { \
 			(v).cap = (v).cap == 0 ? 16 : (v).cap * 2; \

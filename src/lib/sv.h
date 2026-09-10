@@ -1,7 +1,7 @@
 #ifndef STRING_VIEW_H_
 #define STRING_VIEW_H_
 
-#include "types.h"
+#include <types.h>
 #include "sb.h"
 
 typedef struct {

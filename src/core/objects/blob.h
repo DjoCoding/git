@@ -36,7 +36,6 @@ void blob_free(Self *self);
 
 #ifdef BLOB_IMPLEMENTATION_
 
-
 #include <stdlib.h>
 #include <string.h>
 

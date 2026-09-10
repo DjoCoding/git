@@ -1,7 +1,7 @@
 #ifndef COMMIT_TREE_H_
 #define COMMIT_TREE_H_
 
-#include "../../lib/include.h"
+#include <lib/include.h>
 
 // @return Result<char *> (commit hash bytes char[HASH_BYTES_SIZE] as char *)
 Result commit_tree(
@@ -13,9 +13,9 @@ Result commit_tree(
 
 #ifdef COMMIT_TREE_IMPLEMENTATION_
 
-#include "../commit.h"
-#include "../../tools/include.h"
-#include "../utils/include.h"
+#include <core/objects/commit.h>
+#include <core/utils/include.h>
+#include <tools/include.h>
 
 Result commit_tree(
 	char *tree_hash,
@@ -31,10 +31,8 @@ Result commit_tree(
 	
 	commit_free(commit);		// <-- at this point you don't need commit anymore
 
-	StringView commit_format_sv = sv_init(commit_format, commit_format_len);
-	
 	unsigned char commit_hash_bytes[HASH_BYTES_SIZE] = {0};
-	hash__(commit_format_sv, commit_hash_bytes);
+	hash(commit_format, commit_format_len, commit_hash_bytes);
 	
 	char *commit_hash_text = hash_to_text(commit_hash_bytes, sb);
 
@@ -52,7 +50,7 @@ Result commit_tree(
 	char *commit_object_full_path = object_full_path_format(objects_dir_path, commit_hash_text, sb);
 	free(commit_hash_text);
 
-	Result compression_result = zlib_compress_and_save(commit_format_sv, commit_object_full_path);
+	Result compression_result = zlib_compress_and_save(commit_format, commit_format_len, commit_object_full_path);
 	if(!compression_result.ok) {
 		free(commit_object_full_path);
 		free(commit_format);

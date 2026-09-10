@@ -1,7 +1,8 @@
 #ifndef COMMIT_H_
 #define COMMIT_H_
 
-#include "../lib/include.h"
+#include <types.h>
+#include <lib/include.h>
 
 typedef struct {
 	char *tree;
@@ -72,8 +73,6 @@ Self *commit_new(char *tree, char *parent, char *message) {
 }
 
 void commit_format(Self *self, StringBuilder *sb) {
-	sb_clear(sb);
-
 	sb_push_cstr(sb, "tree ");
 	sb_push_cstr(sb, self->tree);
 	sb_push_char(sb, '\n');
@@ -95,7 +94,6 @@ void commit_format(Self *self, StringBuilder *sb) {
 	sb_push_char(sb, '\n');
 
 	sb_push_cstr(sb, self->message);
-
 
 	usize commit_content_len = sb_len(sb);
 	char *commit_content = sb_collect(sb);

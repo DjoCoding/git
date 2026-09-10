@@ -1,30 +1,30 @@
 #ifndef HASH_FILE_H_
 #define HASH_FILE_H_
 
-#include "../../lib/include.h"
+#include <lib/include.h>
 
 // @return Result<char *> (blob hash bytes char[HASH_BYTES_SIZE] as char *)
 Result hash_file(char *file_path, char *objects_dir_path, StringBuilder *sb);
 
 #ifdef HASH_FILE_ACTION_IMPLEMENTATION_
 
-#include "../../tools/include.h"
+#include <tools/include.h>
 #include "../blob.h"
 
 #include <string.h>
 
 Result hash_file(char *file_path, char *objects_dir_path, StringBuilder *sb) {
-    Result read_file_result = file_read(file_path);
-    if(!read_file_result.ok) return read_file_result;
+    FileReader *reader = file_reader_new_from_path(file_path);
+    
+    sb_clear(sb);
+    usize file_size = file_reader_read_all_as_string(reader, sb);
+    char *file_content = sb_collect(sb);
 
-    char *file_contents = (char *)read_file_result.as.data;
-    usize file_contents_len = strlen(file_contents);
-
-    Blob *blob = blob_new(file_contents_len, file_contents);
-    free(file_contents);
+    Blob *blob = blob_new(file_size, file_content);
+    free(file_content);
 
     unsigned char hash_buffer[HASH_BYTES_SIZE] = {0};
-    blob_hash__(blob, hash_buffer, sb);
+    blob_hash(blob, hash_buffer, sb);
 
     sb_clear(sb);
     char *hash = hash_to_text(hash_buffer, sb);

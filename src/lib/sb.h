@@ -2,7 +2,7 @@
 #define STRING_H_
 
 #include "sv.h"
-#include "types.h"
+#include <types.h>
 
 typedef struct {
     char *content;

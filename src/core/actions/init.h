@@ -1,7 +1,7 @@
 #ifndef INIT_H_
 #define INIT_H_
 
-#include "../../lib/include.h"
+#include <lib/include.h>
 
 // @return Result<NULL>
 Result init(
@@ -22,12 +22,12 @@ Result init(
 	if (mkdir(root_dir_path, 0755) == -1 || 
 		mkdir(objects_dir_path, 0755) == -1 || 
 		mkdir(refs_dir_path, 0755) == -1) {
-		return result_error("failed to create directories");
+		return result_error("cannot create directories");
 	}
 	
 	FILE *headFile = fopen(head_file_path, "w");
 	if (headFile == NULL) {
-		return result_error("failed to create head file");
+		return result_error("cannot create head file");
 	}
 
 	fprintf(headFile, "ref: refs/heads/main\n");

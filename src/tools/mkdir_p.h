@@ -2,7 +2,7 @@
 #define MKDIR_P_H_
 
 #include <sys/stat.h>
-#include "../lib/include.h"
+#include <lib/include.h>
 
 // @return Result<NULL>
 Result mkdir_p(const char *path, mode_t mode);
@@ -18,7 +18,7 @@ Result mkdir_p(const char *path, mode_t mode)
     size_t length = strlen(path);
 
     if (length >= sizeof(buffer)) {
-		return result_error("mkdir -p failed, path too long");
+		return result_error("cannot mkdir -p because path too long");
     }
 
     memcpy(buffer, path, length + 1);
@@ -30,13 +30,13 @@ Result mkdir_p(const char *path, mode_t mode)
         *p = '\0';
 
         if (mkdir(buffer, mode) == -1 && errno != EEXIST)
-            return result_error("mkdir -p failed");
+            return result_error("cannot mkdir -p");
 
         *p = '/';
     }
 
     if (mkdir(buffer, mode) == -1 && errno != EEXIST) {
-        return result_error("mkdir -p failed");
+        return result_error("cannot mkdir -p");
     }
 
 	return result_ok(NULL);

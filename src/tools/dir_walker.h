@@ -1,20 +1,11 @@
 #ifndef DIR_WALKER_H_
 #define DIR_WALKER_H_
 
-#include "../lib/include.h"
+#include <tools/fs.h>
+#include <lib/include.h>
 
-typedef enum {
-    DIR_ENTRY_TYPE_FILE,
-    DIR_ENTRY_TYPE_DIR,
-    DIR_ENTRY_TYPE_SYMLINK,
-    DIR_ENTRY_TYPE_UNKNOWN
-} DirEntryType;
-
-typedef struct {
-    char *path;
-    DirEntryType type;
-    u16 git_mode;
-} DirEntry;
+typedef FileType DirEntryType;
+typedef FileInfo DirEntry;
 
 typedef void (*DirWalkCallback)(DirEntry entry, void *context);
 
@@ -28,8 +19,6 @@ WalkContext walk_context_init(bool pre_order, StringBuilder *sb, void *cb_contex
 
 // @return Result<NULL>
 Result walk_dir(char *dir_path, DirWalkCallback callback, WalkContext context);
-
-const char *direntry_type_to_string(DirEntryType type);
 
 #ifdef DIR_WALKER_IMPLEMENTATION_
 
@@ -73,28 +62,6 @@ u16 git_mode_from_stat(mode_t mode) {
     return 0;
 }
 
-DirEntryType dir_entry_type_from_stat(mode_t mode) {
-    if (S_ISREG(mode))  return DIR_ENTRY_TYPE_FILE;
-    if (S_ISDIR(mode))  return DIR_ENTRY_TYPE_DIR;
-    if (S_ISLNK(mode))  return DIR_ENTRY_TYPE_SYMLINK;
-    // if (S_ISCHR(mode))  return "Character Device";
-    // if (S_ISBLK(mode))  return "Block Device";
-    // if (S_ISFIFO(mode)) return "FIFO (Pipe)";
-    // if (S_ISSOCK(mode)) return "Socket";
-    return DIR_ENTRY_TYPE_UNKNOWN;
-}
-
-const char *dir_entry_type_to_string(DirEntryType type) {
-    switch (type) {
-        case DIR_ENTRY_TYPE_DIR:        return "dir";
-        case DIR_ENTRY_TYPE_FILE:       return "file";
-        case DIR_ENTRY_TYPE_SYMLINK:    return "symlink";
-        case DIR_ENTRY_TYPE_UNKNOWN:    return "unknown";
-        default:
-            assert(false && "unreachable");
-    }
-}
-
 WalkContext walk_context_init(bool pre_order, StringBuilder *sb, void *cb_context) {
     assert(sb != NULL);
 
@@ -105,14 +72,6 @@ WalkContext walk_context_init(bool pre_order, StringBuilder *sb, void *cb_contex
     context.cb_context = cb_context;
 
     return context;
-}
-
-DirEntry dir_entry_init(char *path, mode_t mode) {
-    return (DirEntry) {
-        .path = path,
-        .git_mode = git_mode_from_stat(mode),
-        .type = dir_entry_type_from_stat(mode)
-    };
 }
 
 Result walk_dir(char *dir_path, DirWalkCallback callback, WalkContext context) {
@@ -131,7 +90,7 @@ Result walk_dir(char *dir_path, DirWalkCallback callback, WalkContext context) {
         return result_error("unable to stat directory");
     }
 
-    DirEntry direntry = dir_entry_init(dir_path, file_stat.st_mode);
+    DirEntry direntry = file_info(dir_path);
 
     if(context.pre_order) {
         callback(direntry, context.cb_context);
@@ -144,23 +103,16 @@ Result walk_dir(char *dir_path, DirWalkCallback callback, WalkContext context) {
         }
 
         snprintf(full_path, sizeof(full_path), "%s/%s", dir_path, entry->d_name);
+        // doing this call to avoid error
         if (lstat(full_path, &file_stat) == -1) {
             perror("stat error");
             continue; 
         }
 
-        DirEntryType type = dir_entry_type_from_stat(file_stat.st_mode);
 
-        if(type != DIR_ENTRY_TYPE_DIR) {
-            sb_clear(context.sb);
-            sb_push_cstr(context.sb, full_path);
-            char *path = sb_collect(context.sb);
-
-            DirEntry direntry = dir_entry_init(path, file_stat.st_mode);
-
+        DirEntry direntry = file_info(full_path);
+        if(direntry.type != FILE_TYPE_DIR) {
             callback(direntry, context.cb_context);
-            free(path);
-
             continue;
         }
         

@@ -1,16 +1,16 @@
 #ifndef ZLIB_H_
 #define ZLIB_H_
 
-#include "../lib/include.h"
+#include <lib/include.h>
 
 // @description decompresses a file and gets back its content in sb
 //              the caller is responsible of collecting the string
 // @return Result<NULL>
 Result zlib_decompress(const char *file_path, StringBuilder *sb);
 
-// @description compresses a string and writes the result to file
+// @description compresses a buffer and stores it to file
 // @return Result<NULL>
-Result zlib_compress_and_save(StringView content, const char *file_path);
+Result zlib_compress_and_save(char *buffer, usize buffer_size, const char *file_path);
 
 #ifdef ZLIB_IMPLEMENTATION_
 
@@ -23,7 +23,7 @@ Result zlib_decompress(const char *file_path, StringBuilder *sb) {
     
     FILE *file = fopen(file_path, "rb");
     if (file == NULL) {
-        return result_error("zlib failed to open file");
+        return result_error("cannot open file");
     }
 
     z_stream stream = {0};
@@ -31,7 +31,7 @@ Result zlib_decompress(const char *file_path, StringBuilder *sb) {
     int status = inflateInit2(&stream, MAX_WBITS);
     if (status != Z_OK) {
         fclose(file);
-        return result_error("zlib failed to initialize");
+        return result_error("cannot initialize zlib");
     }
 
     unsigned char input_buffer[BUFFER_SIZE];
@@ -50,7 +50,7 @@ Result zlib_decompress(const char *file_path, StringBuilder *sb) {
         if (ferror(file)) {
             inflateEnd(&stream);
             fclose(file);
-            return result_error("zlib failed to read file");
+            return result_error("cannot read file");
         }
 
         if (bytes_read == 0) {
@@ -85,7 +85,7 @@ Result zlib_decompress(const char *file_path, StringBuilder *sb) {
             if (status != Z_OK) {
                 inflateEnd(&stream);
                 fclose(file);
-                return result_error("zlib failed during decompression");
+                return result_error("cannot zlib decompress");
             }
 
             if (stream.avail_in == 0) {
@@ -108,10 +108,10 @@ Result zlib_decompress(const char *file_path, StringBuilder *sb) {
     return result_ok(NULL);
 }
 
-Result zlib_compress_and_save(StringView content, const char *file_path) {
+Result zlib_compress_and_save(char *buffer, usize buffer_size, const char *file_path) {
     FILE *file = fopen(file_path, "wb");
     if (file == NULL) {
-        return result_error("zlib failed to open file");
+        return result_error("cannot open file");
     }
 
     z_stream stream = {0};
@@ -119,13 +119,13 @@ Result zlib_compress_and_save(StringView content, const char *file_path) {
     int status = deflateInit(&stream, Z_BEST_COMPRESSION);
     if (status != Z_OK) {
         fclose(file);
-        return result_error("zlib failed to initialize");
+        return result_error("cannot initialize zlib");
     }
 
     unsigned char output_buffer[BUFFER_SIZE];
 
-    stream.next_in = (Bytef *)content.content;
-    stream.avail_in = (uInt)content.len;
+    stream.next_in = (Bytef *)buffer;
+    stream.avail_in = (uInt)buffer_size;
 
     do {
         stream.next_out = output_buffer;
@@ -147,7 +147,7 @@ Result zlib_compress_and_save(StringView content, const char *file_path) {
             if (bytes_written != bytes_produced) {
                 deflateEnd(&stream);
                 fclose(file);
-                return result_error("zlib failed to write compressed data");
+                return result_error("cannot zlib compress");
             }
         }
     } while (status == Z_OK);
@@ -155,7 +155,7 @@ Result zlib_compress_and_save(StringView content, const char *file_path) {
     if (status != Z_STREAM_END) {
         deflateEnd(&stream);
         fclose(file);
-        return result_error("zlib failed to compress");
+        return result_error("cannot zlib compress");
     }
 
     deflateEnd(&stream);

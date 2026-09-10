@@ -27,41 +27,6 @@ Result walk_dir(char *dir_path, DirWalkCallback callback, WalkContext context);
 #include <sys/types.h>
 #include <string.h>
 
-u16 permissions_from_stat(mode_t mode) {
-    u8 owner = ((mode & S_IRUSR) ? 4 : 0) |
-               ((mode & S_IWUSR) ? 2 : 0) |
-               ((mode & S_IXUSR) ? 1 : 0);
-
-    u8 group = ((mode & S_IRGRP) ? 4 : 0) |
-               ((mode & S_IWGRP) ? 2 : 0) |
-               ((mode & S_IXGRP) ? 1 : 0);
-
-    u8 others = ((mode & S_IROTH) ? 4 : 0) |
-                ((mode & S_IWOTH) ? 2 : 0) |
-                ((mode & S_IXOTH) ? 1 : 0);
-
-    return (owner << 6) | (group << 3) | others;
-}
-
-u16 git_mode_from_stat(mode_t mode) {
-    if (S_ISDIR(mode))
-        return 040000;
-
-    if (S_ISLNK(mode))
-        return 0120000;
-
-    if (S_ISREG(mode)) {
-        u32 permissions = permissions_from_stat(mode);
-
-        if (permissions & 0100)
-            return 0100755;
-
-        return 0100644;
-    }
-
-    return 0;
-}
-
 WalkContext walk_context_init(bool pre_order, StringBuilder *sb, void *cb_context) {
     assert(sb != NULL);
 

@@ -10,16 +10,8 @@ Result cat_file(char *cstr_hash, char *objects_dir_path, StringBuilder *sb);
 
 #include <core/objects/blob.h>
 
-Result cat_file(char *cstr_hash, char *objects_dir_path, StringBuilder *sb) {
-    usize hash_len = strlen(cstr_hash);
-	
-	sb_clear(sb);
-    sb_push_cstr(sb, objects_dir_path);
-    sb_push_cstr(sb, "/");
-    sb_push(sb, cstr_hash, 2); // take the first 2 chars of the hash
-    sb_push_cstr(sb, "/");
-    sb_push(sb, &cstr_hash[2], hash_len - 2); // take the first 2 chars of the hash
-	char *path = sb_collect(sb);
+Result cat_file(char *blob_hash_text, char *objects_dir_path, StringBuilder *sb) {
+	char *path = object_full_path_format(objects_dir_path, blob_hash_text, sb);
 
 	Result blob_result = blob_load_from_file(path, sb);
 	if(!blob_result.ok) {

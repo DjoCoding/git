@@ -23,6 +23,18 @@ Result add_regular_file(Index *index, char *file_path, char *objects_dir_path, S
 	if(!result.ok) return result;
 
 	char *hash_bytes = (char *)result.as.data;
+	if(hash_bytes == NULL) {
+		// empty file is ignored
+        fprintf(stderr, "WARNING: empty file \"%s\" ignored\n", file_path);
+		return result_ok(NULL);
+	}
+
+	// all info.path start with './'
+	assert(sv_starts_with(sv_from_cstr(info.path), sv_from_cstr("./")));
+
+	// remove the './' from the index entry
+	// this is safe because IndexEntry owns its file path
+	info.path += 2;
 
 	IndexEntry new_entry = index_entry_init(
 		info.ctime, 
@@ -56,41 +68,63 @@ void add_dir_walker(DirEntry entry, void *ctx) {
 		Result result = add_regular_file(context->index, entry.path, context->objects_dir_path, context->sb);
 		if(!result.ok) {
 			const char *error = result.as.error;
-			fprintf(stderr, "ERROR: failed to add file %s, %s\n", entry.path, error);
+			fprintf(stderr, "ERROR: failed to add file \"%s\", %s\n", entry.path, error);
 		} 
 		return;
 	}
 
 	if(entry.type == FILE_TYPE_DIR) return; // do nothing in case of dir
 
-	fprintf(stderr, "ERROR: failed to add file %s, file type not supported yet\n", entry.path);
+	fprintf(stderr, "ERROR: failed to add file \"%s\", file type not supported yet\n", entry.path);
 }
 
-Result add_file(Index *index, char *path, char *objects_dir_path, StringBuilder *sb) {
-	FileInfo info = file_info(path);
-	if(!info.exists) return result_error("file does not exist");
-
-	if(info.type == FILE_TYPE_REGULAR) {
-		return add_regular_file(index, info.path, objects_dir_path, sb);
-	}
-
-	if(info.type == FILE_TYPE_DIR) {
-		AddDirWalkerContext cb_context = {
+Result add_dir(Index *index, char *dir_path, char *objects_dir_path, StringBuilder *sb) {
+	AddDirWalkerContext cb_context = {
 			.index = index,
 			.objects_dir_path = objects_dir_path,
 			.sb = sb
 		};
 
-		WalkContext context = {
-			.pre_order = false,		// doesn't matter
-			.sb = sb,
-			.cb_context = &cb_context
-		};
+	WalkContext context = {
+		.pre_order = false,		// doesn't matter
+		.sb = sb,
+		.cb_context = &cb_context
+	};
 
-		Result result = walk_dir(info.path, add_dir_walker, context);
+	Result result = walk_dir(dir_path, add_dir_walker, context);
+	return result;
+}
+
+Result add_file(Index *index, char *path, char *objects_dir_path, StringBuilder *sb) {
+	char *npath = git_path_normalize(path, sb);
+	if(npath == NULL) {
+		return result_error("invalid file path");
+	}
+
+	if(strcmp(npath, ".") == 0) {
+		Result result = add_dir(index, ".", objects_dir_path, sb);
+		return result;
+	}
+
+	FileInfo info = file_info(npath);
+	if(!info.exists) {
+		free(npath);
+		return result_error("file does not exist");
+	}
+
+	if(info.type == FILE_TYPE_REGULAR) {
+		Result result = add_regular_file(index, npath, objects_dir_path, sb);
+		free(npath);
+		return result;
+	}
+
+	if(info.type == FILE_TYPE_DIR) {
+		Result result = add_dir(index, npath, objects_dir_path, sb);
+		free(npath);
 		return result;
 	}
 	
+	free(npath);
 	return result_error("unsupported file type");
 }
 

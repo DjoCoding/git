@@ -9,6 +9,10 @@ typedef struct {
     usize len;
 } StringView;
 
+typedef struct {
+	Vec(StringView)
+} StringViewVec;
+
 StringView sv_init(char *content, usize len);
 StringView sv_from_cstr(char *cstr);
 

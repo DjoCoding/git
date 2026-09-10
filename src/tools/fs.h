@@ -13,7 +13,9 @@ typedef struct {
 
 FileReader *file_reader_new_from_path(char *file_path);
 
-usize file_reader_read_all_as_string(FileReader *reader, StringBuilder *sb);
+// @return contents of the file as c-string
+char *file_reader_read_all_as_string(FileReader *reader, StringBuilder *sb);
+
 bool file_reader_read_bytes(FileReader *reader, char *buffer, usize buffer_size);
 
 void file_reader_close(FileReader *reader);
@@ -83,13 +85,13 @@ FileReader *file_reader_new_from_path(char *file_path) {
     return reader;
 }
 
-usize file_reader_read_all_as_string(FileReader *reader, StringBuilder *sb) {
+char *file_reader_read_all_as_string(FileReader *reader, StringBuilder *sb) {
     assert(reader->handle != NULL);
     
     fseek(reader->handle, 0, SEEK_END);
     
     usize size = ftell(reader->handle); 
-    if(size == 0) return 0;
+    if(size == 0) return NULL;
 
     fseek(reader->handle, 0, SEEK_SET);
 
@@ -108,8 +110,7 @@ usize file_reader_read_all_as_string(FileReader *reader, StringBuilder *sb) {
     }
 
     sb_push(sb, buffer, size);
-
-    return size;
+    return sb_collect(sb);
 }
 
 bool file_reader_read_bytes(FileReader *reader, char *buffer, usize buffer_size) {
@@ -125,6 +126,8 @@ void file_reader_close(FileReader *reader) {
 
     reader->handle = NULL;
     reader->path = NULL;
+
+    free(reader);
 }
 
 FileWriter *file_writer_new_from_path(char *file_path) {
@@ -184,6 +187,8 @@ void file_writer_close(FileWriter *writer) {
     
     writer->handle = NULL;
     writer->path = NULL;
+
+    free(writer);
 }
 
 FileType file_type_from_mode(mode_t mode) {
@@ -214,7 +219,7 @@ FileInfo file_info(char *file_path) {
     
     int code = stat(file_path, &st);
     if(code == -1) {
-        if(errno == ENONET) return (FileInfo) {.exists=false};
+        if(errno == ENOENT) return (FileInfo) {.exists=false};
         perror("stat");
         exit(1);
     }

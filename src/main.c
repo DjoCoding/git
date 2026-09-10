@@ -56,6 +56,11 @@ int hash_file_command(HashFileCommandContext context) {
     }
 
     char *hash_bytes = result.as.data;
+    if(hash_bytes == NULL) {
+        fprintf(stderr, "WARNING: empty file \"%s\" ignored\n", context.file_path);
+        return 0;
+    }
+
     char *hash_text = hash_to_text((unsigned char *)hash_bytes, context.sb);
 
     fprintf(stdout, "%s\n", hash_text);
@@ -187,12 +192,7 @@ typedef struct {
 // @command init
 // @example init
 int init_command(InitCommandContext context) {
-    Result result = init(
-        context.git_context->paths.root,
-        context.git_context->paths.objects,
-        context.git_context->paths.refs,
-        context.git_context->paths.head
-    );
+    Result result = init(context.git_context);
     if(!result.ok) {
         const char *error = result.as.error;
         fprintf(stderr, "ERROR: %s\n", error);
@@ -277,7 +277,7 @@ int add_command(AddCommandContext context) {
             success = false;
 
             const char *error = result.as.error;
-            fprintf(stderr, "ERROR: failed to add file %s, %s\n", path, error);
+            fprintf(stderr, "ERROR: failed to add file \"%s\", %s\n", path, error);
             
             continue;
         }
@@ -342,16 +342,55 @@ int ls_files_command(LsFilesCommandContext context) {
 }
 
 typedef struct {
-    char *git_dir_path;
-    char *objects_dir_path;
-    char *index_file_path;
-    char *head_file_path;
+    GitContext *git_context;
     char *message;
     StringBuilder *sb;
 } CommitCommandContext;
 
 // @command commit
 // @example commit -m[--message] <message>
+int commit_command(CommitCommandContext context) {
+    assert(context.git_context != NULL);
+    assert(context.message != NULL);
+    assert(context.sb != NULL);
+
+    bool exists = file_exists(context.git_context->paths.index);
+    if(!exists) {
+        fprintf(stderr, "ERROR: invalid use of \"commit\" command, make sure to stage files using \"add\" first\n");
+        return 1;
+    }
+
+    Result load_index_result = index_load_from_file(context.git_context->paths.index, context.sb);
+    if(!load_index_result.ok) {
+        const char *error = load_index_result.as.error;
+        fprintf(stderr, "ERROR: failed to load index, %s\n", error);
+        return 1;
+    }
+
+    Index *index = (Index *)load_index_result.as.data;
+
+    Result result = commit_staged(index, context.message, context.git_context, context.sb);
+    if(!result.ok) {
+        index_free(index);
+
+        const char *error = result.as.error;
+        fprintf(stderr, "ERROR: failed to commit changes, %s\n", error);
+
+        return 1;
+    }
+
+    Commit *commit = (Commit *)result.as.data;
+
+    unsigned char commit_hash_bytes[HASH_BYTES_SIZE] = {0};
+    commit_hash(commit, commit_hash_bytes, context.sb); commit_free(commit);
+
+    char *commit_hash_text = hash_to_text(commit_hash_bytes, context.sb);
+
+    fprintf(stdout, "successful commit %s\n", commit_hash_text);
+    free(commit_hash_text);
+
+    return 0;
+}
 
 
 char *GIT_DIR = "mygit";
@@ -421,7 +460,13 @@ int main(int argc, char *argv[]) {
             goto cleanup_and_error;
         }
 
-        code = 1;
+        CommitCommandContext context = {
+            .git_context = git_context,
+            .message = message,
+            .sb = sb
+        };
+
+        code = commit_command(context);
         goto cleanup_and_exit;
     }
     

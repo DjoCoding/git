@@ -7,6 +7,7 @@
 #	define CORE_UTILS_IMPLEMENTATION_
 #	define CORE_OBJECTS_IMPLEMENTATION_
 #	define CORE_ACTIONS_IMPLEMENTATION_
+#	define CORE_HEAD_IMPLEMENTATION_
 #endif // CORE_IMPLEMENTATION
 
 #include <core/git-context.h>
@@ -14,6 +15,7 @@
 #include <core/actions/include.h>
 #include <core/utils/include.h>
 #include <core/index.h>
+#include <core/head.h>
 
 
 #endif // CORE_INCLUDE_H_

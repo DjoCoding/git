@@ -1,10 +1,11 @@
 #ifndef TREE_H_
 #define TREE_H_
 
+#include <interfaces.h>
 #include <lib/include.h>
 
 typedef struct {
-	u16   mode;
+	u32   mode;
 	char *file_name;  // owned
 	unsigned char hash[HASH_BYTES_SIZE];
 } TreeEntry;
@@ -13,7 +14,7 @@ typedef struct {
 	TreeEntry *items;
 	usize	  len;
 	usize     cap;
-} Tree;
+} Tree IMPLEMENTS Hashable Writable;
 
 #define Self Tree
 
@@ -34,7 +35,7 @@ Result tree_load_from_file(char *file_path, StringBuilder *sb);
 // @return Result<NULL>
 Result tree_write_to_file(Self *self, char *file_path, StringBuilder *sb);
 
-TreeEntry tree_entry_init(u16 mode, char *file_name, unsigned char hash[HASH_BYTES_SIZE]);
+TreeEntry tree_entry_init(u32 mode, char *file_name, unsigned char hash[HASH_BYTES_SIZE]);
 
 // @description performs a - b
 int tree_entry_compare(TreeEntry a, TreeEntry b);
@@ -64,7 +65,7 @@ Self *tree_new() {
 	return self;
 }
 
-TreeEntry tree_entry_init(u16 mode, char *file_name, unsigned char hash[HASH_BYTES_SIZE]) {
+TreeEntry tree_entry_init(u32 mode, char *file_name, unsigned char hash[HASH_BYTES_SIZE]) {
 	assert(file_name != NULL);
 
 	TreeEntry entry = {0};
@@ -148,7 +149,7 @@ bool tree_parser_get_next(TreeParser *parser, TreeEntry *entry) {
 	char buffer[7] = {0};
 	memcpy(buffer, mode_sv.content, mode_sv.len);
 
-	u16 mode = strtoul(buffer, NULL, 8);
+	u32 mode = strtoul(buffer, NULL, 8);
 	if(!is_valid_git_mode(mode)) return false;
 
 	parser->content = sv_slice(parser->content, mode_sv.len, parser->content.len);

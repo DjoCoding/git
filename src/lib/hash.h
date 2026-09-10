@@ -44,7 +44,11 @@ char *hash_to_text(unsigned char hash_buffer[HASH_BYTES_SIZE], StringBuilder *sb
     for(usize i = 0; i < HASH_BYTES_SIZE; i++) {
         sb_pushf(sb, "%02x", hash_buffer[i]);
     }
-    return sb_collect(sb);
+
+    char *hash_text = sb_collect(sb);
+    ASSERT_CSTR_IS_HASH_TEXT(hash_text);
+
+    return hash_text;
 }
 
 #endif

@@ -3,8 +3,9 @@
 
 #include <lib/include.h>
 
-#define GIT_OBJECTS_DIR 	"objects"
-#define GIT_REFS_DIR  		"refs"
+#define GIT_OBJECTS_DIR 	"objects/"
+#define GIT_REFS_DIR  		"refs/"
+#define GIT_REFS_HEADS_DIR  		"refs/heads/"
 #define GIT_HEAD_FILE  		"HEAD"
 #define GIT_INDEX_FILE  	"index"
 
@@ -12,6 +13,7 @@ typedef struct {
 	char *root;
 	char *objects;
 	char *refs;
+	char *refs_heads;
 	char *head;
 	char *index;
 } GitContextPaths;
@@ -24,6 +26,7 @@ GitContext *git_context_init(char *root, StringBuilder *sb);
 
 #ifdef CORE_GIT_CONTEXT_IMPLEMENTATION_
 
+// @note root must be passed without / at the end (example: mygit and not mygit/)
 GitContextPaths git_context_paths_init(char *root, StringBuilder *sb) {
 	GitContextPaths paths = {0};
 
@@ -46,6 +49,12 @@ GitContextPaths git_context_paths_init(char *root, StringBuilder *sb) {
 	sb_clear(sb);
 	sb_push_cstr(sb, root);
 	sb_push_char(sb, '/');
+	sb_push_cstr(sb, GIT_REFS_HEADS_DIR);
+	paths.refs_heads = sb_collect(sb);
+
+	sb_clear(sb);
+	sb_push_cstr(sb, root);
+	sb_push_char(sb, '/');
 	sb_push_cstr(sb, GIT_INDEX_FILE);
 	paths.index = sb_collect(sb);
 
@@ -62,6 +71,7 @@ void git_context_paths_free(GitContextPaths paths) {
 	free(paths.root);
 	free(paths.objects);
 	free(paths.refs);
+	free(paths.refs_heads);
 	free(paths.head);
 	free(paths.index);
 }

@@ -1,6 +1,7 @@
 #ifndef _BLOB_H
 #define _BLOB_H
 
+#include <interfaces.h>
 #include <types.h>
 #include <lib/include.h>
 #include <tools/include.h>
@@ -8,7 +9,7 @@
 typedef struct {
     usize len;
     char *content;
-} Blob;
+} Blob IMPLEMENTS Hashable Writable;
 
 #define Self Blob
 
@@ -70,12 +71,10 @@ Result blob_parse(StringView sv) {
 
     StringView blob_size_sv = sv_until(sv, '\0');
     if(sv.len == blob_size_sv.len) {
-        fprintf(stderr, "nan2\n");
         return result_error("invalid blob format");
     }
 
     if(!sv_is_number(blob_size_sv)) {
-        fprintf(stderr, "nan\n");
         return result_error("invalid blob format");
     }
 

@@ -2,9 +2,11 @@
 #define CORE_UTILS_H_
 
 #ifdef CORE_UTILS_IMPLEMENTATION_
-#	define PATH_IMPLEMENTATION_
+#	define CORE_UTILS_PATH_IMPLEMENTATION_
+#	define CORE_UTILS_GIT_IMPLEMENTATION_
 #endif // CORE_UTILS_IMPLEMENTATION_
 
 #include "path.h"
+#include "git.h"
 
 #endif // CORE_UTILS_H_

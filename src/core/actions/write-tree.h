@@ -3,7 +3,7 @@
 
 #include <lib/include.h>
 #include <tools/include.h>
-#include <core/objects/tree.h>
+#include <core/objects/include.h>
 
 #include "hash-file.h"
 
@@ -34,10 +34,6 @@ WriteTreeDirWalkCallbackContext write_tree_dir_walk_callback_context_init(String
     context.objects_dir_path = object_dir_path;
     context.sb = sb;
 
-    context.tree_entries.items = NULL;
-    context.tree_entries.len   = 0;
-    context.tree_entries.cap   = 0;
-
     return context;
 }
 
@@ -54,7 +50,12 @@ void write_tree_walker(DirEntry entry, void *ctx) {
         
         // hash file returns hash raw bytes
         char *hash_bytes = (char *)result.as.data;
-
+        if(hash_bytes == NULL) {
+            // empty file is ignored
+            fprintf(stderr, "WARNING: empty file \"%s\" ignored\n", entry.path);
+            return;
+        }
+ 
         TreeEntry item = tree_entry_init(
             git_mode_from_stat(entry.mode),
             entry.path,
@@ -105,56 +106,31 @@ void write_tree_walker(DirEntry entry, void *ctx) {
         // now that we have collected all direct children
         // we can construct the current dir entry tree
 
-        unsigned char hash_buffer[HASH_BYTES_SIZE] = {0};
-        tree_hash(tree, hash_buffer, context->sb);
 
-        char *hash = hash_to_text(hash_buffer, context->sb);
-        usize hash_len = strlen(hash);
-        assert(hash_len >= 2);
-
-        sb_clear(context->sb);
-        sb_push_cstr(context->sb, context->objects_dir_path);
-        sb_push_char(context->sb, '/');
-        sb_push(context->sb, hash, 2);
-        char *tree_dir_path = sb_collect(context->sb);
+        ObjectWriter writer = object_writer_init(context->objects_dir_path, context->sb);
         
-        Result mkdir_result = mkdir_p(tree_dir_path, 0755);
-        if(!mkdir_result.ok) {
-            free(hash);
-            free(tree_dir_path);
-            tree_free(tree);
-
-            const char *error = mkdir_result.as.error;
-            fprintf(stderr, "ERROR: failed to write tree object, %s\n", error);
-
-            return;
-        }
-
-        sb_clear(context->sb);
-        sb_push_cstr(context->sb, tree_dir_path); free(tree_dir_path);
-        sb_push_char(context->sb, '/');
-        sb_push(context->sb, &hash[2], hash_len - 2); free(hash);
-        char *tree_file_path = sb_collect(context->sb);
-
-        Result result = tree_write_to_file(tree, tree_file_path, context->sb);
+        Result result = object_writer_write_tree(writer, tree);
         if(!result.ok) {
             tree_free(tree);
-
+            
             const char *error = result.as.error;
-            fprintf(stderr, "ERROR: failed to write tree object, %s\n", error);
+            fprintf(stderr, "ERROR: failed to write tree, %s\n", error);
             
             return;
         }
         tree_free(tree);
 
+        char *tree_hash_bytes = (char *)result.as.data;
+
         TreeEntry item = tree_entry_init(
             git_mode_from_stat(entry.mode),
             entry.path,
-            hash_buffer
+            (unsigned char *)tree_hash_bytes
        );
 
+        free(tree_hash_bytes);
         vec_push(context->tree_entries, item);
-        
+       
         return;
     }
 

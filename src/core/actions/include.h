@@ -10,6 +10,7 @@
 #	define CORE_ACTIONS_COMMIT_TREE_IMPLEMENTATION_
 #	define CORE_ACTIONS_ADD_FILE_IMPLEMENTATION_
 #	define CORE_ACTIONS_LS_FILES_IMPLEMENTATION_
+#	define CORE_ACTIONS_COMMIT_IMPLEMENTATION_ 
 #endif
 
 #include "hash-file.h"
@@ -20,5 +21,6 @@
 #include "commit-tree.h"
 #include "add-file.h"
 #include "ls-files.h"
+#include "commit.h"
 
 #endif // CORE_ACTIONS_H_

@@ -5,32 +5,23 @@
 #include <stdbool.h>
 
 // @return Result<Tree *>
-Result ls_tree(char *cstr_hash, char *objects_dir_path, StringBuilder *sb);
+Result ls_tree(char *tree_hash_text, char *objects_dir_path, StringBuilder *sb);
 
 #ifdef CORE_ACTIONS_LS_TREE_IMPLEMENTATION_
 
 #include <core/objects/tree.h>
 
-Result ls_tree(char *cstr_hash, char *objects_dir_path, StringBuilder *sb) {
+Result ls_tree(char *tree_hash_text, char *objects_dir_path, StringBuilder *sb) {
     (void)objects_dir_path;
-	
-	usize hash_len = strlen(cstr_hash);
-	assert(hash_len >= 2);
 
-    sb_clear(sb);
-    sb_push_cstr(sb, objects_dir_path);
-    sb_push_cstr(sb, "/");
-    sb_push(sb, cstr_hash, 2);
-    sb_push_cstr(sb, "/");
-    sb_push(sb, cstr_hash + 2, hash_len - 2);
-	char *tree_object_path = sb_collect(sb);
+	char *path = object_full_path_format(objects_dir_path, tree_hash_text, sb);
 
-	Result result = tree_load_from_file(tree_object_path, sb);
+	Result result = tree_load_from_file(path, sb);
 	if(!result.ok) {
-		free(tree_object_path);
+		free(path);
 		return result;
 	}
-	free(tree_object_path);
+	free(path);
 
 	Tree *tree = (Tree *)result.as.data;
 	return result_ok(tree);

@@ -2,35 +2,28 @@
 #define CORE_ACTIONS_INIT_H_
 
 #include <lib/include.h>
+#include <core/git-context.h>
 
 // @return Result<NULL>
-Result init(
-	char *git_dir_path,
-	char *objects_dir_path,
-	char *refs_dir_path,
-	char *head_file_path
-);
+Result init(GitContext *git_context);
 
 #ifdef CORE_ACTIONS_INIT_IMPLEMENTATION_
 
-Result init(
-	char *git_dir_path,
-	char *objects_dir_path,
-	char *refs_dir_path,
-	char *head_file_path
-) {
-	if (mkdir(git_dir_path, 0755) == -1 || 
-		mkdir(objects_dir_path, 0755) == -1 || 
-		mkdir(refs_dir_path, 0755) == -1) {
+Result init(GitContext *git_context) {
+	if (mkdir(git_context->paths.root, 0755) == -1 || 
+		mkdir(git_context->paths.objects, 0755) == -1 || 
+		mkdir(git_context->paths.refs, 0755) == -1 ||
+		mkdir(git_context->paths.refs_heads, 0755) == -1
+	) {
 		return result_error("cannot create directories");
 	}
 	
-	FILE *headFile = fopen(head_file_path, "w");
+	FILE *headFile = fopen(git_context->paths.head, "w");
 	if (headFile == NULL) {
 		return result_error("cannot create head file");
 	}
 
-	fprintf(headFile, "ref: refs/heads/main\n");
+	fprintf(headFile, "ref: refs/heads/main");
 	fclose(headFile);
 
 	return result_ok(NULL);

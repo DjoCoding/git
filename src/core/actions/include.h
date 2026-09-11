@@ -11,6 +11,7 @@
 #	define CORE_ACTIONS_ADD_FILE_IMPLEMENTATION_
 #	define CORE_ACTIONS_LS_FILES_IMPLEMENTATION_
 #	define CORE_ACTIONS_COMMIT_IMPLEMENTATION_ 
+#	define CORE_ACTIONS_CHECKOUT_IMPLEMENTATION_
 #endif
 
 #include "hash-file.h"
@@ -22,5 +23,6 @@
 #include "add-file.h"
 #include "ls-files.h"
 #include "commit.h"
+#include "checkout.h"
 
 #endif // CORE_ACTIONS_H_

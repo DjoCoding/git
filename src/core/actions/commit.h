@@ -27,8 +27,7 @@ Result treeify_dir(Index *index, char *dir_path, char *objects_dir_path, StringB
 	Tree *tree = tree_new();
 
 	// get all the entries who's path start with dir_path
-	IndexEntry *e = NULL;
-	vec_foreach(*index, e) {
+	vec_foreach(*index, _, e, {
 		StringView entry_file_path = sv_from_cstr(e->file_path);
 		if(!sv_starts_with(entry_file_path, dir_path_sv)) continue;
 
@@ -78,7 +77,7 @@ Result treeify_dir(Index *index, char *dir_path, char *objects_dir_path, StringB
 		smap_set(visited_sub_dirs, sub_dir_path, true); // mark it as visited
 		
 		free(sub_dir_path);
-	}
+	}); 
 
 	ObjectWriter writer = object_writer_init(objects_dir_path, sb);
 	

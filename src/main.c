@@ -206,8 +206,7 @@ int ls_tree_command(LsTreeCommandContext context) {
 
     LsTreeCommandOptions options = context.options;
 
-    TreeEntry *p = NULL;
-    vec_foreach(*tree, p) {
+    vec_foreach(*tree, _, p, {
         TreeEntry e = *p;
         if(options.name_only) {
             fprintf(stdout, "%s\n", e.file_name);
@@ -224,7 +223,7 @@ int ls_tree_command(LsTreeCommandContext context) {
 
         fprintf(stdout, "%u %s %s\n", e.mode, e.file_name, hash);
         free(hash);
-    }
+    });
 
     tree_free(tree);
     return 0;
@@ -359,20 +358,16 @@ int add_command(AddCommandContext context) {
 
     bool success = true;
 	
-    char **ppath = NULL;
-	vec_foreach(context.paths, ppath) {
+	vec_foreach(context.paths, _, ppath, {
 		char *path = *ppath;
 		
 		Result result = add_file(index, path, context.git_context->paths.objects, context.sb);
-		if(!result.ok) {
-            success = false;
+		if(result.ok) continue;
 
-            const char *error = result.as.error;
-            fprintf(stderr, "ERROR: failed to add file \"%s\", %s\n", path, error);
-            
-            continue;
-        }
-	}
+        success = false;
+        const char *error = result.as.error;
+        fprintf(stderr, "ERROR: failed to add file \"%s\", %s\n", path, error);
+	}); 
 
     index_write_to_file(index, context.git_context->paths.index, context.sb);
     
@@ -409,8 +404,7 @@ int ls_files_command(LsFilesCommandContext context) {
 
     Index *index = (Index *)result.as.data;
 
-    IndexEntry *e = NULL;
-    vec_foreach(*index, e) {
+    vec_foreach(*index, _, e, {
         if(context.options.name_only) {
             fprintf(stdout, "%s\n", e->file_path);
             continue;
@@ -432,7 +426,7 @@ int ls_files_command(LsFilesCommandContext context) {
         fprintf(stdout, "%s %u %s\n", e->file_path, e->file_size, hash);
         
         free(hash);
-    }
+    }); 
 
     index_free(index);
     return 0;
@@ -484,6 +478,40 @@ int commit_command(CommitCommandContext context) {
     return 0;
 }
 
+typedef struct {
+    char *commit_hash_text;
+    GitContext *git_context;
+    StringBuilder *sb;
+} CheckoutCommandContext;
+
+int checkout_command(CheckoutCommandContext context) {
+    assert_git_is_initialized(context.git_context);
+
+    ASSERT_CSTR_IS_HASH_TEXT(context.commit_hash_text);
+    assert(context.git_context != NULL);
+    assert(context.sb != NULL);
+
+    Result result = {0};
+    
+    result = index_load_from_file(context.git_context->paths.index, context.sb);
+    if(!result.ok) {
+        const char *error = result.as.error;
+        fprintf(stderr, "ERROR: %s\n", error);
+        return 1;
+    }
+
+    Index *index = (Index *)result.as.data;
+
+    result = checkout(index, context.commit_hash_text, context.git_context, context.sb);
+    if(!result.ok) {
+        const char *error = result.as.error;
+        fprintf(stderr, "ERROR: %s\n", error);
+        return 1;
+    }
+
+    index_free(index);
+    return 0;
+}
 
 char *GIT_DIR = "mygit";
 
@@ -515,7 +543,31 @@ int main(int argc, char *argv[]) {
         code = init_command(context);
         goto cleanup_and_exit;
     }
-    
+
+    if (strcmp(command, "checkout") == 0) {
+        if(args_end(args)) {
+            fprintf(stderr, "ERROR: must provide commit hash\n");
+            goto cleanup_and_error;
+        }
+
+        char *commit_hash = args_consume(&args);
+        
+        usize commit_hash_len = strlen(commit_hash);
+        if(commit_hash_len != HASH_TEXT_SIZE) {
+            fprintf(stderr, "ERROR: invalid commit hash format\n");
+            goto cleanup_and_error;
+        }
+
+        CheckoutCommandContext context = {
+            .commit_hash_text = commit_hash,
+            .git_context = git_context,
+            .sb = sb
+        };
+
+        code = checkout_command(context);
+        goto cleanup_and_exit;
+    }
+
     if (strcmp(command, "commit") == 0) {
         char *message = NULL;
 

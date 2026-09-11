@@ -77,22 +77,20 @@ void index_push_entry(Self *self, IndexEntry entry) {
 bool index_contains_hash(Self *self, unsigned char blob_hash[HASH_BYTES_SIZE]) {
 	bool found = false;
 	
-	IndexEntry *e = NULL;
-	vec_foreach(*self, e) {
+	vec_foreach(*self, _, e, {
 		if(memcmp(blob_hash, e->blob_hash, HASH_BYTES_SIZE) == 0) {
 			found = true;
 			break;
 		}
-	}
+	}); 
 
 	return found;
 }
 
 IndexEntry *index_find_file(Self *self, char *file_path) {
-	IndexEntry *e = NULL;
-	vec_foreach(*self, e) {
+	vec_foreach(*self, _, e, {
 		if(strcmp(e->file_path, file_path) == 0) return e;
-	}
+	}); 
 	return NULL;
 }
 
@@ -188,10 +186,9 @@ void index_format(Self *self, StringBuilder *sb, bool include_checksum) {
 
 	sb_push(sb, (char *)&self->len, sizeof(self->len));
 
-	IndexEntry *e = NULL;
-	vec_foreach(*self, e) {
+	vec_foreach(*self, _, e, {
 		index_entry_format(*e, sb);
-	}
+	}); 
 
 	if(!include_checksum) return;
 
@@ -396,11 +393,10 @@ Result index_load_from_file(char *file_path, StringBuilder *sb) {
 }
 
 void index_free(Self *self) {
-	IndexEntry *e = NULL;
-	vec_foreach(*self, e) {
+	vec_foreach(*self, _, e, {
 		index_entry_free(*e);
-	}
-	free(self->items);
+	});
+	vec_free(*self);
 	free(self);
 }
 

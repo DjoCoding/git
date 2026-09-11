@@ -19,6 +19,7 @@ char *hash_to_text(unsigned char hash_buffer[HASH_BYTES_SIZE], StringBuilder *sb
 
 #define ASSERT_CSTR_IS_HASH_TEXT(cstr) \
     do { \
+        assert(cstr != NULL); \
         size_t size = strlen(cstr); \
         assert(size == HASH_TEXT_SIZE); \
     } while(0)

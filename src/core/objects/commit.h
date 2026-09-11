@@ -12,7 +12,7 @@ typedef struct {
 	bool has_parent;
 
 	char *message; 		// owned
-} Commit IMPLEMENTS Hashable Writable;
+} Commit IMPLEMENTS Hashable Writable Loadable;
 
 #define Self Commit
 

@@ -9,7 +9,7 @@
 typedef struct {
     usize len;
     char *content;
-} Blob IMPLEMENTS Hashable Writable;
+} Blob IMPLEMENTS Hashable Writable Loadable;
 
 #define Self Blob
 

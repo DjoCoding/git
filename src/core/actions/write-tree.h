@@ -72,8 +72,7 @@ void write_tree_walker(DirEntry entry, void *ctx) {
 
         Tree *tree = tree_new();
 
-        TreeEntry *p = NULL;
-        vec_foreach(context->tree_entries, p) {
+        vec_foreach(context->tree_entries, _, p, {
             TreeEntry item = *p;
             StringView child_path_sv = sv_from_cstr(item.file_name);
 
@@ -100,7 +99,7 @@ void write_tree_walker(DirEntry entry, void *ctx) {
 
             // here we know that the child is a direct child of the dir
             vec_push(*tree, entry);
-        }
+        });
         vec_sort(TreeEntry, *tree, tree_entry_compare);
 
         // now that we have collected all direct children
@@ -151,23 +150,21 @@ Result write_tree(char *dir_path, char *objects_dir_path, StringBuilder *sb) {
 
     TreeEntry *dir_entry = NULL; 
 
-    TreeEntry *e = NULL;
-    vec_foreach(context.tree_entries, e) {
+    vec_foreach(context.tree_entries, _, e, {
         if(sv_eq(sv_from_cstr(e->file_name), sv_from_cstr(dir_path))) {
             dir_entry = e;
             break;
         }
-    }
+    }); 
     assert(dir_entry != NULL);
 
     sb_clear(sb);
     sb_push(sb, (char *)dir_entry->hash, HASH_BYTES_SIZE);
     char *hash_bytes = sb_collect(sb);
 
-    e = NULL;
-    vec_foreach(context.tree_entries, e) {
+    vec_foreach(context.tree_entries, _, e, {
         free(e->file_name);
-    }
+    }); 
     vec_free(context.tree_entries);
 
     return result_ok(hash_bytes);

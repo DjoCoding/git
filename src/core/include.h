@@ -2,6 +2,7 @@
 #define CORE_INCLUDE_H_
 
 #ifdef CORE_IMPLEMENTATION
+#   define CORE_FILE_IMPLEMENTATION_
 #	define CORE_GIT_CONTEXT_IMPLEMENTATION_
 #	define CORE_INDEX_IMPLEMENTATION_
 #	define CORE_UTILS_IMPLEMENTATION_
@@ -10,6 +11,7 @@
 #	define CORE_HEAD_IMPLEMENTATION_
 #endif // CORE_IMPLEMENTATION
 
+#include <core/file.h>
 #include <core/git-context.h>
 #include <core/objects/include.h>
 #include <core/actions/include.h>

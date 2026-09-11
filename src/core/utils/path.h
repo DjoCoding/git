@@ -3,8 +3,8 @@
 
 #include <lib/include.h>
 
-char *object_dir_path_format(char *objects_dir_path, char *object_hash_text, StringBuilder *sb);
-char *object_full_path_format(char *objects_dir_path, char *object_hash_text, StringBuilder *sb);
+char *object_dir_path_format(char *objects_dir_path, char object_hash_text[HASH_TEXT_SIZE], StringBuilder *sb);
+char *object_full_path_format(char *objects_dir_path, char object_hash_text[HASH_TEXT_SIZE], StringBuilder *sb);
 
 // @return normalized form of the path or NULL if it is invalid
 char *git_path_normalize(char *path, StringBuilder *sb);
@@ -14,27 +14,19 @@ char *git_path_normalize(char *path, StringBuilder *sb);
 #include <assert.h>
 #include <string.h>
 
-char *object_dir_path_format(char *objects_dir_path, char *object_hash_text, StringBuilder *sb) {
-	ASSERT_CSTR_IS_HASH_TEXT(object_hash_text);
-
+char *object_dir_path_format(char *objects_dir_path, char object_hash_text[HASH_TEXT_SIZE], StringBuilder *sb) {
 	sb_clear(sb);
 	sb_push_cstr(sb, objects_dir_path);
 	sb_push(sb, object_hash_text, 2);
-
 	return sb_collect(sb);
 }
 
-char *object_full_path_format(char *objects_dir_path, char *object_hash_text, StringBuilder *sb) {
-	ASSERT_CSTR_IS_HASH_TEXT(object_hash_text);
-
-	usize object_hash_text_len = strlen(object_hash_text);
-	
+char *object_full_path_format(char *objects_dir_path, char object_hash_text[HASH_TEXT_SIZE], StringBuilder *sb) {
 	sb_clear(sb);
 	sb_push_cstr(sb, objects_dir_path);
 	sb_push(sb, object_hash_text, 2);
 	sb_push_char(sb, '/');
-	sb_push(sb, &object_hash_text[2], object_hash_text_len - 2);
-
+	sb_push(sb, &object_hash_text[2], HASH_TEXT_SIZE - 2);
 	return sb_collect(sb);
 }
 
@@ -74,11 +66,10 @@ char *git_path_normalize(char *path, StringBuilder *sb) {
 	sb_push_cstr(sb, "./");
 	
 	if(parts.len != 0) {
-		StringView *part = NULL;
-		vec_foreach(parts, part) {
+		vec_foreach(parts, _, part, {
 			sb_push_sv(sb, *part);
 			sb_push_char(sb, '/');
-		}
+		}); 
 	}
 	
 	sb->len -= 1;		// remove last added /

@@ -14,7 +14,7 @@ typedef struct {
 	TreeEntry *items;
 	usize	  len;
 	usize     cap;
-} Tree IMPLEMENTS Hashable Writable;
+} Tree IMPLEMENTS Hashable Writable Loadable;
 
 #define Self Tree
 
@@ -230,11 +230,10 @@ void tree_entry_format(TreeEntry e, StringBuilder *sb) {
 }
 
 void tree_format(Self *self, StringBuilder *sb) {
-	TreeEntry *p = NULL;
-	vec_foreach(*self, p) {
+	vec_foreach(*self, _, p, {
 		TreeEntry e = *p;
 		tree_entry_format(e, sb);		
-	}
+	}); 
 
 	usize content_size = sb_len(sb);
 	char *content      = sb_collect(sb);

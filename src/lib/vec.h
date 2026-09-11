@@ -29,8 +29,14 @@
 		(v).len += 1; \
 	} while(0)
 
-#define vec_foreach(v, p) \
-	for(p = (v).items; p < (v).items + (v).len; ++p)
+#define vec_foreach(v, i, p, ...) \
+	do { \
+		size_t i = 0; \
+		for(typeof((v).items) p = (v).items; p < (v).items + (v).len; ++p) { \
+			__VA_ARGS__ \
+			i += 1; \
+		} \
+	} while(0)
 
 #define vec_sort(T, v, c) \
 	do { \

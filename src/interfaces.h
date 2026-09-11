@@ -15,4 +15,10 @@
 
 #define Writable
 
+// interface Loadable {
+// 		Result self_load_from_file(char *file_path, StringBuilder *sb);
+// }
+
+#define Loadable
+
 #endif

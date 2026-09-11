@@ -32,7 +32,7 @@ Result add_regular_file(Index *index, char *file_path, char *objects_dir_path, S
 	char *hash_bytes = (char *)result.as.data;
 	if(hash_bytes == NULL) {
 		// empty file is ignored
-        fprintf(stderr, "WARNING: empty file \"%s\" ignored\n", file_path);
+        fprintf(stderr, "WARNING: empty file \"%s\" ignored\n", info.path);
 		return result_ok(NULL);
 	}
 

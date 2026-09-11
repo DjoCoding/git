@@ -65,7 +65,6 @@ Result treeify_dir(Index *index, char *dir_path, char *objects_dir_path, StringB
 		}
 		
 		FileInfo info = file_info(sub_dir_path);
-		fprintf(stdout, "sub_dir_path = %s\n", sub_dir_path);
 		assert((info.exists && info.type == FILE_TYPE_DIR));
 		
 		u32 mode = git_mode_from_stat(info.mode);

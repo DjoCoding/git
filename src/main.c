@@ -29,6 +29,75 @@ void usage(FILE *f, char *prog_name, char *error) {
     fprintf(f, "%s", buffer);
 }
 
+void assert_git_is_initialized(GitContext *git_context) {
+    FileInfo root_info = file_info(git_context->paths.root);
+    if(!root_info.exists) {
+        fprintf(stderr, "ERROR: not a git repository, consider initializing first\n");
+        exit(1);
+    }
+
+    if(root_info.type != FILE_TYPE_DIR) {
+        fprintf(stderr, "ERROR: not proper git repository, must delete \"%s\" and re-initialize again\n", git_context->paths.root);
+        exit(1);
+    }
+
+    FileInfo objects_info = file_info(git_context->paths.objects);
+    if(!objects_info.exists) {
+        fprintf(stderr, "ERROR: not proper git repository, must delete \"%s\" directory and re-initialize again\n", git_context->paths.root);
+        exit(1);
+    }
+
+    if(objects_info.type != FILE_TYPE_DIR) {
+        fprintf(stderr, "ERROR: not proper git repository, must delete \"%s\" directory and re-initialize again\n", git_context->paths.root);
+        exit(1);
+    }
+
+    FileInfo refs_info = file_info(git_context->paths.refs);
+    if(!refs_info.exists) {
+        fprintf(stderr, "ERROR: not proper git repository, must delete \"%s\" directory and re-initialize again\n", git_context->paths.root);
+        exit(1);
+    }
+
+    if(refs_info.type != FILE_TYPE_DIR) {
+        fprintf(stderr, "ERROR: not proper git repository, must delete \"%s\" directory and re-initialize again\n", git_context->paths.root);
+        exit(1);
+    }
+
+    FileInfo refs_heads_info = file_info(git_context->paths.refs_heads);
+    if(!refs_heads_info.exists) {
+        fprintf(stderr, "ERROR: not proper git repository, must delete \"%s\" directory and re-initialize again\n", git_context->paths.root);
+        exit(1);
+    }
+
+    if(refs_heads_info.type != FILE_TYPE_DIR) {
+        fprintf(stderr, "ERROR: not proper git repository, must delete \"%s\" directory and re-initialize again\n", git_context->paths.root);
+        exit(1);
+    }
+
+    FileInfo head_info = file_info(git_context->paths.head);
+    if(!head_info.exists) {
+        fprintf(stderr, "ERROR: not proper git repository, must delete \"%s\" directory and re-initialize again\n", git_context->paths.root);
+        exit(1);
+    }
+
+    if(head_info.type != FILE_TYPE_REGULAR) {
+        fprintf(stderr, "ERROR: not proper git repository, must delete \"%s\" directory and re-initialize again\n", git_context->paths.root);
+        exit(1);
+    }
+
+    StringBuilder *sb = sb_new();
+    
+    Result result = head_file_parse(head_info.path, sb);
+    if(!result.ok) {
+        sb_free(sb);
+
+        fprintf(stderr, "ERROR: not proper git repository, must delete \"%s\" directory and re-initialize again\n", git_context->paths.root);
+        exit(1);
+    }
+
+    sb_free(sb);
+}
+
 typedef struct {
     GitContext *git_context;
     char *file_path;
@@ -41,6 +110,8 @@ int hash_file_command(HashFileCommandContext context) {
     assert(context.file_path != NULL);
     assert(context.git_context != NULL);
     assert(context.sb != NULL);
+
+    assert_git_is_initialized(context.git_context);
 
     FileInfo info = file_info(context.file_path);
     if(info.type != FILE_TYPE_REGULAR) {
@@ -85,6 +156,8 @@ int cat_file_command(CatFileCommandContext context) {
     assert(context.git_context != NULL);
     assert(context.sb != NULL);
 
+    assert_git_is_initialized(context.git_context);
+
     Result result = cat_file(context.cstr_hash, context.git_context->paths.objects, context.sb);
     if(!result.ok) {
         const char *error = result.as.error;
@@ -118,6 +191,9 @@ int ls_tree_command(LsTreeCommandContext context) {
     
     assert(context.git_context != NULL);
     assert(context.sb != NULL);
+
+    assert_git_is_initialized(context.git_context);
+
 
     Result result = ls_tree(context.cstr_hash, context.git_context->paths.objects, context.sb);
     if(!result.ok) {
@@ -167,6 +243,8 @@ int write_tree_command(WriteTreeCommandContext context) {
     assert(context.git_context != NULL);
     assert(context.sb != NULL);
 
+    assert_git_is_initialized(context.git_context);
+
     Result result = write_tree(context.dir_path, context.git_context->paths.objects, context.sb);
     if(!result.ok) {
         const char *error = result.as.error;
@@ -187,20 +265,29 @@ int write_tree_command(WriteTreeCommandContext context) {
 
 typedef struct {
     GitContext *git_context;
+    StringBuilder *sb;
 } InitCommandContext;
 
 // @command init
 // @example init
 int init_command(InitCommandContext context) {
-    Result result = init(context.git_context);
+    assert(context.git_context != NULL);
+    assert(context.sb != NULL);
+
+    Result result = init(context.git_context, context.sb);
     if(!result.ok) {
         const char *error = result.as.error;
         fprintf(stderr, "ERROR: %s\n", error);
         return 1;
     }
 
-    
-    fprintf(stdout, "Initialized git directory\n");
+    bool re_initialized = (bool)result.as.data;
+
+    fprintf(stdout, 
+        re_initialized ? 
+        "Re-initialized git repository\n" : 
+        "Initialized git repository\n"
+    );
     return 0;
 }
 
@@ -220,6 +307,8 @@ int commit_tree_command(CommitTreeCommandContext context) {
 
     assert(context.message != NULL);
     assert(context.sb != NULL);
+
+    assert_git_is_initialized(context.git_context);
 
     Result result = commit_tree(context.tree_hash, context.message, context.git_context->paths.objects, context.sb);
     if(!result.ok) {
@@ -250,6 +339,8 @@ typedef struct {
 int add_command(AddCommandContext context) {
     assert(context.git_context != NULL);
     assert(context.sb != NULL);
+
+    assert_git_is_initialized(context.git_context);
 
     Index *index = NULL;
 
@@ -303,12 +394,18 @@ typedef struct {
 // @command ls-files
 // @example ls-files {--name-only} {--object-only}
 int ls_files_command(LsFilesCommandContext context) {
+    assert(context.git_context != NULL);
+    assert(context.sb != NULL);
+
+    assert_git_is_initialized(context.git_context);
+
     Result result = ls_files(context.git_context->paths.index, context.sb);
     if(!result.ok) {
         const char *error = result.as.error;
         fprintf(stderr, "ERROR: %s\n", error);
         return 1;
     }
+
 
     Index *index = (Index *)result.as.data;
 
@@ -354,6 +451,8 @@ int commit_command(CommitCommandContext context) {
     assert(context.message != NULL);
     assert(context.sb != NULL);
 
+    assert_git_is_initialized(context.git_context);
+
     bool exists = file_exists(context.git_context->paths.index);
     if(!exists) {
         fprintf(stderr, "ERROR: invalid use of \"commit\" command, make sure to stage files using \"add\" first\n");
@@ -380,14 +479,7 @@ int commit_command(CommitCommandContext context) {
     }
 
     Commit *commit = (Commit *)result.as.data;
-
-    unsigned char commit_hash_bytes[HASH_BYTES_SIZE] = {0};
-    commit_hash(commit, commit_hash_bytes, context.sb); commit_free(commit);
-
-    char *commit_hash_text = hash_to_text(commit_hash_bytes, context.sb);
-
-    fprintf(stdout, "successful commit %s\n", commit_hash_text);
-    free(commit_hash_text);
+    commit_free(commit);
 
     return 0;
 }
@@ -419,7 +511,7 @@ int main(int argc, char *argv[]) {
     GitContext *git_context = git_context_init(GIT_DIR, sb);
 
     if (strcmp(command, "init") == 0) {
-        InitCommandContext context = {.git_context = git_context};
+        InitCommandContext context = {.git_context = git_context, .sb = sb};
         code = init_command(context);
         goto cleanup_and_exit;
     }
@@ -766,3 +858,4 @@ cleanup_and_error:
     git_context_free(git_context);
     return 1;
 }
+

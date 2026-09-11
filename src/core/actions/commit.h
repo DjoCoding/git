@@ -21,7 +21,7 @@ Result commit_staged(Index *index, char *message, GitContext *git_context, Strin
 
 // @description get tree out of index entries who's directory is <dir_path>
 // @return Result<char *> (tree hash bytes)
-Result treeify_index(Index *index, char *dir_path, char *objects_dir_path, StringBuilder *sb, StringVec *visited) {
+Result treeify_dir(Index *index, char *dir_path, char *objects_dir_path, StringBuilder *sb, SMap(bool) visited_sub_dirs) {
 	StringView dir_path_sv = sv_from_cstr(dir_path);
 
 	Tree *tree = tree_new();
@@ -52,17 +52,12 @@ Result treeify_index(Index *index, char *dir_path, char *objects_dir_path, Strin
 		sb_push_char(sb, '/');							// add "/" because the function expects it
 		char *sub_dir_path = sb_collect(sb);
 
-		char **item = NULL; bool found = false;
-		vec_foreach(*visited, item) {
-			if(strcmp(*item, sub_dir_path) == 0) {
-				found = true;
-				break;
-			}
+		if(smap_contains(visited_sub_dirs, sub_dir_path)) {
+			free(sub_dir_path);
+			continue;
 		}
-
-		if(found) continue;
 		
-		Result result = treeify_index(index, sub_dir_path, objects_dir_path, sb, visited);
+		Result result = treeify_dir(index, sub_dir_path, objects_dir_path, sb, visited_sub_dirs);
 		if(!result.ok) {
 			free(sub_dir_path);
 			tree_free(tree);
@@ -81,7 +76,9 @@ Result treeify_index(Index *index, char *dir_path, char *objects_dir_path, Strin
 		free(tree_hash_bytes);
 
 		vec_push(*tree, tree_entry);
-		vec_push(*visited, sub_dir_path); // mark it as visited
+		smap_set(visited_sub_dirs, sub_dir_path, true); // mark it as visited
+		
+		free(sub_dir_path);
 	}
 
 	ObjectWriter writer = object_writer_init(objects_dir_path, sb);
@@ -89,6 +86,19 @@ Result treeify_index(Index *index, char *dir_path, char *objects_dir_path, Strin
 	Result result = object_writer_write_tree(writer, tree);
 	tree_free(tree);
 
+	return result;
+}
+
+Result treeify_index(Index *index, char *objects_dir_path, StringBuilder *sb) {
+	SMap(bool) visited_sub_dirs = smap_new(bool);
+
+	Result result = treeify_dir(index, "\0", objects_dir_path, sb, visited_sub_dirs);
+	if(!result.ok) {
+		smap_free(visited_sub_dirs);
+		return result;
+	}
+	
+	smap_free(visited_sub_dirs);
 	return result;
 }
 
@@ -121,8 +131,7 @@ Result commit_staged(
 		file_reader_close(reader);
 	}
 
-	StringVec visited_dirs = {0};
-	Result tree_result = treeify_index(index, "\0", git_context->paths.objects, sb, &visited_dirs); // must be "./" to work correctly
+	Result tree_result = treeify_index(index, git_context->paths.objects, sb); // must be "./" to work correctly
 	if(!tree_result.ok) {
 		free(head_ref_git_path);
 		return tree_result;

@@ -8,6 +8,8 @@
 #	define STRING_IMPLEMENTATION_
 #	define STRING_VIEW_IMPLEMENTATION_
 # 	define HASH_IMPLEMENTATION_
+# 	define LIST_IMPLEMENTATION_
+# 	define MAP_IMPLEMENTATION_
 #endif
 
 #include "result.h"
@@ -15,5 +17,7 @@
 #include "sv.h"
 #include "hash.h"
 #include "vec.h"
+#include "list.h"
+#include "map.h"
 
 #endif

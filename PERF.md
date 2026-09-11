@@ -1,9 +1,11 @@
--- commit with no hashmap on sub dir search
-real 0m0.049s
-user 0m0.021s
-sys 0m0.028s
+# Linux Repository -- 08df884136f1c1197bab2a27814404fd329d9aac
 
--- commit with hashmap sub dir search
-real 0m0.039s
-user 0m0.009s
-sys 0m0.029s
+-- git add linux
+real 2m3.912s
+user 1m53.437s
+sys 0m8.187s
+
+-- git commit -m "add linux"
+real 0m9.391s
+user 0m9.773s
+sys 0m0.463s

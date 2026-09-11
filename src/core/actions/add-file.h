@@ -22,19 +22,19 @@ Result add_regular_file(Index *index, char *file_path, char *objects_dir_path, S
 	Result result  = hash_file(file_path, objects_dir_path, sb);
 	if(!result.ok) return result;
 
-	char *hash_bytes = (char *)result.as.data;
-	if(hash_bytes == NULL) {
-		// empty file is ignored
-        fprintf(stderr, "WARNING: empty file \"%s\" ignored\n", file_path);
-		return result_ok(NULL);
-	}
-
 	// all info.path start with './'
 	assert(sv_starts_with(sv_from_cstr(info.path), sv_from_cstr("./")));
 
 	// remove the './' from the index entry
 	// this is safe because IndexEntry owns its file path
 	info.path += 2;
+
+	char *hash_bytes = (char *)result.as.data;
+	if(hash_bytes == NULL) {
+		// empty file is ignored
+        fprintf(stderr, "WARNING: empty file \"%s\" ignored\n", file_path);
+		return result_ok(NULL);
+	}
 
 	IndexEntry new_entry = index_entry_init(
 		info.ctime, 

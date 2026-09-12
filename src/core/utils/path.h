@@ -34,7 +34,7 @@ char *git_path_normalize(char *path, StringBuilder *sb) {
 	assert(path != NULL);
 	assert(sb != NULL);
 
-	StringViewVec parts = {0};
+	Vec(StringView) parts = vec_new(StringView);
 	
 	StringView path_sv = sv_from_cstr(path);
 	while(path_sv.len != 0) {
@@ -49,25 +49,25 @@ char *git_path_normalize(char *path, StringBuilder *sb) {
 		
 		if(sv_eq(part, sv_from_cstr(".."))) {
 			// out of repo 
-			if(parts.len == 0) {
+			if(vec_len(parts) == 0) {
 				vec_free(parts);
 				return NULL;
 			}
 
-			parts.len -= 1;
+			vec_popd(parts);
 			continue;
 		}
 
-		vec_push(parts, part);
+		vec_pushs(parts, part);
 		continue;
 	}
 
 	sb_clear(sb);
 	sb_push_cstr(sb, "./");
 	
-	if(parts.len != 0) {
-		vec_foreach(parts, _, part, {
-			sb_push_sv(sb, *part);
+	if(vec_len(parts) != 0) {
+		vec_foreach(parts, _, ppart, {
+			sb_push_sv(sb, *ppart);
 			sb_push_char(sb, '/');
 		}); 
 	}

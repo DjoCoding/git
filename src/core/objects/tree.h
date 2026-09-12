@@ -11,9 +11,7 @@ typedef struct {
 } TreeEntry;
 
 typedef struct {
-	TreeEntry *items;
-	usize	  len;
-	usize     cap;
+	Vec(TreeEntry) entries;
 } Tree IMPLEMENTS Hashable Writable Loadable;
 
 #define Self Tree
@@ -60,8 +58,8 @@ Self *tree_new() {
 		exit(1);
 	}
 
-	*self = (Tree){0};
-	
+	self->entries = vec_new(TreeEntry);
+
 	return self;
 }
 
@@ -91,10 +89,10 @@ void tree_entry_free(TreeEntry entry) {
 }
 
 void tree_free(Self *self) {
-	for(usize i = 0; i < self->len; ++i) {
-		tree_entry_free(self->items[i]);
-	}
-	free(self->items);
+	vec_foreach(self->entries, _, pentry, {
+		tree_entry_free(*pentry);
+	});
+	vec_free(self->entries);
 	free(self);
 }
 
@@ -213,7 +211,7 @@ Result tree_parse(StringView tree_content) {
 			tree_free(tree);
 			return result_error("invalid tree format");
 		}
-		vec_push(*tree, entry);
+		vec_pushs(tree->entries, entry);
 	}); 
 
 	return result_ok(tree);
@@ -230,9 +228,8 @@ void tree_entry_format(TreeEntry e, StringBuilder *sb) {
 }
 
 void tree_format(Self *self, StringBuilder *sb) {
-	vec_foreach(*self, _, p, {
-		TreeEntry e = *p;
-		tree_entry_format(e, sb);		
+	vec_foreach(self->entries, _, pentry, {
+		tree_entry_format(*pentry, sb);		
 	}); 
 
 	usize content_size = sb_len(sb);

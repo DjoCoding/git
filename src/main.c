@@ -206,14 +206,13 @@ int ls_tree_command(LsTreeCommandContext context) {
 
     LsTreeCommandOptions options = context.options;
 
-    vec_foreach(*tree, _, p, {
-        TreeEntry e = *p;
+    vec_foreach(tree->entries, _, pentry, {
         if(options.name_only) {
-            fprintf(stdout, "%s\n", e.file_name);
+            fprintf(stdout, "%s\n", pentry->file_name);
             continue;
         }
 
-        char *hash = hash_to_text(e.hash, context.sb);
+        char *hash = hash_to_text(pentry->hash, context.sb);
 
         if(options.object_only) {
             fprintf(stdout, "%s\n", hash);
@@ -221,7 +220,7 @@ int ls_tree_command(LsTreeCommandContext context) {
             continue;
         }
 
-        fprintf(stdout, "%u %s %s\n", e.mode, e.file_name, hash);
+        fprintf(stdout, "%u %s %s\n", pentry->mode, pentry->file_name, hash);
         free(hash);
     });
 
@@ -329,7 +328,7 @@ int commit_tree_command(CommitTreeCommandContext context) {
 
 typedef struct {
     GitContext *git_context;
-    StringVec paths;
+    Vec(char *) paths;
     StringBuilder *sb;
 } AddCommandContext;
 
@@ -404,15 +403,15 @@ int ls_files_command(LsFilesCommandContext context) {
 
     Index *index = (Index *)result.as.data;
 
-    vec_foreach(*index, _, e, {
+    vec_foreach(index->entries, _, pentry, {
         if(context.options.name_only) {
-            fprintf(stdout, "%s\n", e->file_path);
+            fprintf(stdout, "%s\n", pentry->file_path);
             continue;
         }
 
         if(context.options.object_only) {
             sb_clear(context.sb);
-            char *hash = hash_to_text(e->blob_hash, context.sb);
+            char *hash = hash_to_text(pentry->blob_hash, context.sb);
             
             fprintf(stdout, "%s\n", hash);
             
@@ -421,9 +420,9 @@ int ls_files_command(LsFilesCommandContext context) {
         }
 
         sb_clear(context.sb);
-        char *hash = hash_to_text(e->blob_hash, context.sb);
+        char *hash = hash_to_text(pentry->blob_hash, context.sb);
         
-        fprintf(stdout, "%s %u %s\n", e->file_path, e->file_size, hash);
+        fprintf(stdout, "%s %u %s\n", pentry->file_path, pentry->file_size, hash);
         
         free(hash);
     }); 
@@ -669,19 +668,20 @@ int main(int argc, char *argv[]) {
             goto cleanup_and_error;
         }
 
-        StringVec paths = {0};
+
+        Vec(char *) paths = vec_new(char *);
         while(!args_end(args)) {
             char *arg = args_consume(&args);
             
             if(sv_starts_with(sv_from_cstr(arg), sv_from_cstr("-"))) {
                 fprintf(stderr, "ERROR: invalid option %s\n", arg);
-                free(paths.items);
+                vec_free(paths);
                 goto cleanup_and_error;
             }
 
             vec_push(paths, arg);
         }
-        assert(paths.len != 0);
+        assert(vec_len(paths) != 0);
 
         AddCommandContext context = {
             .git_context = git_context,

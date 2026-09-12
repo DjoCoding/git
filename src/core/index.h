@@ -21,14 +21,13 @@ typedef struct {
 } IndexEntry;
 
 typedef struct {
-	Vec(IndexEntry)
+	Vec(IndexEntry) entries;
 } Index; 
 
 typedef struct {
 	FileReader *reader;	// reader to the index file
 	usize consumed;		// determines the count of the consumed index entries
 	usize len;			// determines the len of the index entries
-
 	bool init;			// used for dev assertion
 } IndexParser;
 
@@ -65,20 +64,20 @@ Self *index_new() {
 		exit(1);
 	}
 
-	*self = (Self){0};
+	self->entries = vec_new(IndexEntry);
 
 	return self;
 }
 
 void index_push_entry(Self *self, IndexEntry entry) {
-	vec_push(*self, entry);
+	vec_pushs(self->entries, entry);
 }
 
 bool index_contains_hash(Self *self, unsigned char blob_hash[HASH_BYTES_SIZE]) {
 	bool found = false;
 	
-	vec_foreach(*self, _, e, {
-		if(memcmp(blob_hash, e->blob_hash, HASH_BYTES_SIZE) == 0) {
+	vec_foreach(self->entries, _, pentry, {
+		if(memcmp(blob_hash, pentry->blob_hash, HASH_BYTES_SIZE) == 0) {
 			found = true;
 			break;
 		}
@@ -88,8 +87,8 @@ bool index_contains_hash(Self *self, unsigned char blob_hash[HASH_BYTES_SIZE]) {
 }
 
 IndexEntry *index_find_file(Self *self, char *file_path) {
-	vec_foreach(*self, _, e, {
-		if(strcmp(e->file_path, file_path) == 0) return e;
+	vec_foreach(self->entries, _, pentry, {
+		if(strcmp(pentry->file_path, file_path) == 0) return pentry;
 	}); 
 	return NULL;
 }
@@ -184,10 +183,11 @@ void index_format(Self *self, StringBuilder *sb, bool include_checksum) {
 	// my implementation has no versions
 	// sb_push(sb, self->version);
 
-	sb_push(sb, (char *)&self->len, sizeof(self->len));
+	usize count = vec_len(self->entries);
+	sb_push(sb, (char *)&count, sizeof(count));
 
-	vec_foreach(*self, _, e, {
-		index_entry_format(*e, sb);
+	vec_foreach(self->entries, _, pentry, {
+		index_entry_format(*pentry, sb);
 	}); 
 
 	if(!include_checksum) return;
@@ -393,10 +393,10 @@ Result index_load_from_file(char *file_path, StringBuilder *sb) {
 }
 
 void index_free(Self *self) {
-	vec_foreach(*self, _, e, {
-		index_entry_free(*e);
+	vec_foreach(self->entries, _, pentry, {
+		index_entry_free(*pentry);
 	});
-	vec_free(*self);
+	vec_free(self->entries);
 	free(self);
 }
 

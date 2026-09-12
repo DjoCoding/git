@@ -18,8 +18,8 @@ Result checkout(Index *index, char *commit_hash_text, GitContext *git_context, S
 	Result result = object_loader_load_commit_tree_recursively(loader, commit_hash_text, sb);
 	if(!result.ok) return result;
 
-	FileEntryVec *files = (FileEntryVec *)result.as.data;
-	vec_foreach(*files, _, pfile, {
+	Vec(FileEntry) files = (Vec(FileEntry))result.as.data;
+	vec_foreach(files, _, pfile, {
 		IndexEntry *entry = index_find_file(index, pfile->path);
 		if(entry == NULL) {
 			fprintf(stdout, "file \"%s\" not found in index\n", pfile->path);
@@ -38,10 +38,10 @@ Result checkout(Index *index, char *commit_hash_text, GitContext *git_context, S
 		fprintf(stdout, "file \"%s\" found in index and is changed\n", pfile->path);
 	});
 
-	vec_foreach(*files, _, pfile, {
+	vec_foreach(files, _, pfile, {
 		file_entry_free(*pfile);
 	});
-	vec_free(*files);
+	vec_free(files);
 
 	free(files);
 	return result_ok(NULL);

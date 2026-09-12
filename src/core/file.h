@@ -9,14 +9,7 @@ typedef struct {
 	char  blob_hash_text[HASH_TEXT_SIZE];
 } FileEntry;
 
-typedef struct {
-	FileEntry *items;
-	usize	   len;
-	usize	   cap;
-} FileEntryVec;
-
 #define Self    FileEntry
-#define SelfVec FileEntryVec
 
 Self file_entry_init(u32 mode, char *path, char blob_hash_text[HASH_TEXT_SIZE]);
 void file_entry_free(Self self);

@@ -10,11 +10,7 @@
 typedef struct {
     StringBuilder *sb;
     char *objects_dir_path;
-    struct {
-        TreeEntry *items;
-        usize len;
-        usize cap;
-    } tree_entries;
+    Vec(TreeEntry) tree_entries;
 } WriteTreeDirWalkCallbackContext;
 
 // @return Result<char *> (hash bytes unsigned char[HASH_BYTES_SIZE])
@@ -62,7 +58,7 @@ void write_tree_walker(DirEntry entry, void *ctx) {
             (unsigned char *)hash_bytes
         );
 
-        vec_push(context->tree_entries, item);
+        vec_pushs(context->tree_entries, item);
 
         return;
     }
@@ -98,9 +94,9 @@ void write_tree_walker(DirEntry entry, void *ctx) {
             free(path);
 
             // here we know that the child is a direct child of the dir
-            vec_push(*tree, entry);
+            vec_pushs(tree->entries, entry);
         });
-        vec_sort(TreeEntry, *tree, tree_entry_compare);
+        vec_sort(tree->entries, tree_entry_compare);
 
         // now that we have collected all direct children
         // we can construct the current dir entry tree
@@ -128,7 +124,7 @@ void write_tree_walker(DirEntry entry, void *ctx) {
        );
 
         free(tree_hash_bytes);
-        vec_push(context->tree_entries, item);
+        vec_pushs(context->tree_entries, item);
        
         return;
     }

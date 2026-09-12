@@ -27,8 +27,8 @@ Result treeify_dir(Index *index, char *dir_path, char *objects_dir_path, StringB
 	Tree *tree = tree_new();
 
 	// get all the entries who's path start with dir_path
-	vec_foreach(*index, _, e, {
-		StringView entry_file_path = sv_from_cstr(e->file_path);
+	vec_foreach(index->entries, _, pentry, {
+		StringView entry_file_path = sv_from_cstr(pentry->file_path);
 		if(!sv_starts_with(entry_file_path, dir_path_sv)) continue;
 
 		StringView entry_file_relative_path = sv_slice(entry_file_path, dir_path_sv.len, entry_file_path.len);
@@ -39,8 +39,8 @@ Result treeify_dir(Index *index, char *dir_path, char *objects_dir_path, StringB
 		bool is_direct_child = sv_eq(entry_file_relative_path_dir, entry_file_relative_path);
 		if(is_direct_child) {
 			// now collect the child inside the tree
-			TreeEntry tree_entry = tree_entry_init(e->mode, e->file_path, e->blob_hash);
-			vec_push(*tree, tree_entry);
+			TreeEntry tree_entry = tree_entry_init(pentry->mode, pentry->file_path, pentry->blob_hash);
+			vec_pushs(tree->entries, tree_entry);
 			continue;
 		}
 
@@ -73,7 +73,7 @@ Result treeify_dir(Index *index, char *dir_path, char *objects_dir_path, StringB
 
 		free(tree_hash_bytes);
 
-		vec_push(*tree, tree_entry);
+		vec_pushs(tree->entries, tree_entry);
 		smap_set(visited_sub_dirs, sub_dir_path, true); // mark it as visited
 		
 		free(sub_dir_path);

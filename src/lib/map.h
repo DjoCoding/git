@@ -14,7 +14,7 @@ typedef struct {
 typedef struct {
 	List(MapEntry)   entries[MAP_SIZE];
 	size_t     key_size;
-	size_t	 value_size;
+	size_t	   value_size;
 } __generic__Map;
 
 #define Self __generic__Map
@@ -23,7 +23,7 @@ typedef struct {
 #define SMap(V)    V **
 
 #define map_new(K, V) ({ \
-		__generic__Map self = __generic__map_new(sizeof(K), sizeof(V)); \
+		__generic__Map self = __generic__map_init(sizeof(K), sizeof(V)); \
 		__generic__map_to_pointer(self); \
 	})
 
@@ -173,7 +173,7 @@ uint64_t fnv1a_64_str(const char *str) {
     return hash;
 }
 
-Self __generic__map_new(size_t key_size, size_t value_size) {
+Self __generic__map_init(size_t key_size, size_t value_size) {
 	Self self = {.entries = {0}, .key_size = key_size, .value_size = value_size};
 	return self;
 }
@@ -223,7 +223,7 @@ MapEntry __generic__smap_entry_new(char *key, void *value, size_t value_size) {
 
 static inline Self __generic__map_from_pointer(void *p) {
 	assert(p != NULL);
-	return *(Self *)(MapEntry *)(void *)p;
+	return *(Self *)(MapEntry *)p;
 }
 
 #define __generic__map_to_pointer(self) ((void *)self.entries)

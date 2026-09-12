@@ -60,13 +60,16 @@ Result object_loader_load_tree_recursively(ObjectLoader loader, char tree_hash_t
 
 	Tree *tree = (Tree *)result.as.data;
 
-	FileEntryVec *files = calloc(1, sizeof(*files));
+	Vec(FileEntry) *files = calloc(1, sizeof(*files));
 	if(files == NULL) {
 		perror("malloc");
 		exit(1);
 	}
 
-	vec_foreach(*tree, _, pitem,  {
+
+	*files = vec_new(FileEntry);
+
+	vec_foreach(tree->entries, _, pitem,  {
 		char *hash_text = hash_to_text(pitem->hash, sb);
 		
 		if(pitem->mode == 040000) {
@@ -81,11 +84,11 @@ Result object_loader_load_tree_recursively(ObjectLoader loader, char tree_hash_t
 
 			free(hash_text);
 
-			FileEntryVec *sub_tree_files = (FileEntryVec *)result.as.data;
+			Vec(FileEntry) *sub_tree_files = (Vec(FileEntry) *)result.as.data;
 			
 			// collect all sub tree files inside the global files 
 			vec_foreach(*sub_tree_files, _, pfile, {
-				vec_push(*files, *pfile);
+				vec_pushs(*files, *pfile);
 			});
 
 			vec_free(*sub_tree_files);
@@ -96,7 +99,7 @@ Result object_loader_load_tree_recursively(ObjectLoader loader, char tree_hash_t
 		FileEntry file = file_entry_init(pitem->mode, pitem->file_name, hash_text);
 		free(hash_text);
 
-		vec_push(*files, file);
+		vec_pushs(*files, file);
 	});
 
 	tree_free(tree);

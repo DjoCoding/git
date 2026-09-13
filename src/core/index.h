@@ -8,7 +8,7 @@ typedef struct {
 	u64   mtime;		// last time file content changed
 	// u32   dev;			// device identifier 
 	// u32   ino;			// inode identifier
-	u32   mode;			// file permissions and type
+	u32   git_mode;			// file permissions and type
 	// u32   uid;			// user id of the owner
 	// u32   gid;			// group id of the owner
 	u32   file_size;		// truncated size of the file on disk
@@ -46,15 +46,22 @@ bool index_contains_hash(Self *self, unsigned char blob_hash[HASH_BYTES_SIZE]);
 
 IndexEntry *index_find_file(Self *self, char *file_path);
 
-IndexEntry index_entry_init(u64 ctime, u64 mtime, u32 mode, u32 file_size,  unsigned char blob_hash[HASH_BYTES_SIZE], char *file_path);
+void index_remove_file(Self *self, char *file_path);
 
-void index_entry_copy(IndexEntry *dest, IndexEntry src);
+IndexEntry index_entry_init(u64 ctime, u64 mtime, u32 git_mode, u32 file_size,  unsigned char blob_hash[HASH_BYTES_SIZE], char *file_path);
+
+void index_entry_copy_(IndexEntry *dest, IndexEntry src);
+
+// @description deep copy an entry
+IndexEntry index_entry_dcopy(IndexEntry entry);
+
+void index_entry_free(IndexEntry entry);
 
 void index_free(Self *self);
 
 #ifdef CORE_INDEX_IMPLEMENTATION_
 
-#include <tools/include.h>
+#include <utils/include.h>
 #include <assert.h>
 
 Self *index_new() {
@@ -93,12 +100,43 @@ IndexEntry *index_find_file(Self *self, char *file_path) {
 	return NULL;
 }
 
+void index_remove_file(Self *self, char *file_path) {
+	usize idx = 0;
+	bool found = false;
+
+	vec_foreach(self->entries, i, pentry, {
+		if(strcmp(pentry->file_path, file_path) == 0) {
+			found = true;
+			idx = i;
+			break;
+		}
+	});
+
+	assert(found);
+
+	//  get the entry and push it
+	IndexEntry entry = vec_at(self->entries, idx);
+	index_push_entry(self, entry);
+
+	// remove the original entry
+	for(usize i = idx; i < vec_len(self->entries) - 1; ++i) {
+		IndexEntry next = vec_at(self->entries, i + 1);
+		vec_sets(self->entries, i, next);
+	}
+
+	// pop the entry from the stack and free it
+	entry = vec_pop(self->entries);
+	index_entry_free(entry);
+
+	vec_popd(self->entries);
+}
+
 IndexEntry index_entry_init(
 	u64   ctime,
 	u64   mtime,
 	// u32   dev, 
 	// u32   ino, 
-	u32   mode, 
+	u32   git_mode, 
 	// u32   uid, 
 	// u32   gid, 
 	u32   file_size, 
@@ -112,7 +150,7 @@ IndexEntry index_entry_init(
 	e.mtime = mtime;
 	// e.dev = dev;
 	// e.ino = ino;
-	e.mode = mode;
+	e.git_mode = git_mode;
 	// e.uid = uid;
 	// e.gid = gid;/
 	e.file_size = file_size;
@@ -135,14 +173,18 @@ IndexEntry index_entry_init(
 void index_entry_copy(IndexEntry *dest, IndexEntry src) {
 	dest->ctime = src.ctime;
 	dest->mtime = src.mtime;
-	dest->mode  = src.mode;
-	
+
+	dest->git_mode  = src.git_mode;
 	dest->file_size = src.file_size;
 	
 	free(dest->file_path);
 	dest->file_path = src.file_path;
 
 	memcpy(dest->blob_hash, src.blob_hash, HASH_BYTES_SIZE);
+}
+
+IndexEntry index_entry_dcopy(IndexEntry entry) {
+	return index_entry_init(entry.ctime, entry.mtime, entry.git_mode, entry.file_size, entry.blob_hash, entry.file_path);
 }
 
 
@@ -155,7 +197,7 @@ void index_entry_format(IndexEntry e, StringBuilder *sb) {
 
 	sb_push(sb, (char *)&e.ctime, sizeof(e.ctime));
 	sb_push(sb, (char *)&e.mtime, sizeof(e.mtime));
-	sb_push(sb, (char *)&e.mode, sizeof(e.mode));
+	sb_push(sb, (char *)&e.git_mode, sizeof(e.git_mode));
 	sb_push(sb, (char *)&e.file_size, sizeof(e.file_size));
 	sb_push(sb, (char *)e.blob_hash, HASH_BYTES_SIZE);
 
@@ -284,9 +326,9 @@ bool index_parser_get_next(IndexParser *parser, IndexEntry *entry) {
 	if(!s) return false;
 	read += sizeof(entry->mtime);
 
-	s = file_reader_read_bytes(parser->reader, (char *)&entry->mode, sizeof(entry->mode));
+	s = file_reader_read_bytes(parser->reader, (char *)&entry->git_mode, sizeof(entry->git_mode));
 	if(!s) return false;
-	read += sizeof(entry->mode);
+	read += sizeof(entry->git_mode);
 
 	s = file_reader_read_bytes(parser->reader, (char *)&entry->file_size, sizeof(entry->file_size));
 	if(!s) return false;
@@ -330,7 +372,7 @@ bool index_parser_get_next(IndexParser *parser, IndexEntry *entry) {
 	*entry = index_entry_init(
 		entry->ctime,
 		entry->mtime,
-		entry->mode,
+		entry->git_mode,
 		entry->file_size,
 		entry->blob_hash,
 		buffer

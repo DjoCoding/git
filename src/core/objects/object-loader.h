@@ -24,7 +24,7 @@ Result object_loader_load_tree(ObjectLoader loader, char tree_hash_text[HASH_TEX
 // @return Result<Commit *>
 Result object_loader_load_commit(ObjectLoader loader, char commit_hash_text[HASH_TEXT_SIZE]);
 
-// @return Result<FileEntryVec *>
+// @return Result<Vec(FileEntry) *>
 Result object_loader_load_commit_tree_recursively(ObjectLoader loader, char commit_hash_text[HASH_TEXT_SIZE], StringBuilder *sb);
 
 #ifdef OBJECT_LOADER_IMPLEMENTATION_
@@ -72,7 +72,7 @@ Result object_loader_load_tree_recursively(ObjectLoader loader, char tree_hash_t
 	vec_foreach(tree->entries, _, pitem,  {
 		char *hash_text = hash_to_text(pitem->hash, sb);
 		
-		if(pitem->mode == 040000) {
+		if(pitem->git_mode == 040000) {
 			// load sub tree
 			result = object_loader_load_tree_recursively(loader, hash_text, sb);
 			if(!result.ok) {
@@ -96,7 +96,7 @@ Result object_loader_load_tree_recursively(ObjectLoader loader, char tree_hash_t
 			continue;
 		}
 
-		FileEntry file = file_entry_init(pitem->mode, pitem->file_name, hash_text);
+		FileEntry file = file_entry_init(pitem->git_mode, pitem->file_name, hash_text);
 		free(hash_text);
 
 		vec_pushs(*files, file);

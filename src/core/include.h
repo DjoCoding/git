@@ -9,6 +9,7 @@
 #	define CORE_OBJECTS_IMPLEMENTATION_
 #	define CORE_ACTIONS_IMPLEMENTATION_
 #	define CORE_HEAD_IMPLEMENTATION_
+#	define CORE_WORKDIR_IMPLEMENTATION_
 #endif // CORE_IMPLEMENTATION
 
 #include <core/file.h>
@@ -18,6 +19,7 @@
 #include <core/utils/include.h>
 #include <core/index.h>
 #include <core/head.h>
+#include <core/workdir.h>
 
 
 #endif // CORE_INCLUDE_H_

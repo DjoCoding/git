@@ -2,7 +2,7 @@
 #define CORE_ACTIONS_WRITE_TREE_H_
 
 #include <lib/include.h>
-#include <tools/include.h>
+#include <utils/include.h>
 #include <core/objects/include.h>
 
 #include "hash-file.h"
@@ -46,11 +46,6 @@ void write_tree_walker(DirEntry entry, void *ctx) {
         
         // hash file returns hash raw bytes
         char *hash_bytes = (char *)result.as.data;
-        if(hash_bytes == NULL) {
-            // empty file is ignored
-            fprintf(stderr, "WARNING: empty file \"%s\" ignored\n", entry.path);
-            return;
-        }
  
         TreeEntry item = tree_entry_init(
             git_mode_from_stat(entry.mode),
@@ -87,7 +82,7 @@ void write_tree_walker(DirEntry entry, void *ctx) {
             char *path = sb_collect(context->sb);
 
             TreeEntry entry = tree_entry_init(
-                item.mode,
+                item.git_mode,
                 path,
                 item.hash
             );

@@ -1,7 +1,7 @@
 #ifndef DIR_WALKER_H_
 #define DIR_WALKER_H_
 
-#include <tools/fs.h>
+#include <utils/fs.h>
 #include <lib/include.h>
 
 typedef FileType DirEntryType;

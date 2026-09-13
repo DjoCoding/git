@@ -79,6 +79,7 @@ typedef struct {
 void *__generic__vec_new(size_t item_size);
 
 static inline VecHeader *vec_header(void *p);
+
 static inline void *__generic__vec_getp(void *p, size_t index);
 static inline size_t __generic__vec_itemsize(void *p);
 static inline size_t __generic__vec_len(void *p);
@@ -149,7 +150,7 @@ void *__generic__vec_pop(void *p) {
 		exit(1);
 	}
 
-	void *item = __generic__vec_getp(header->items, header->len - 1);
+	void *item = __generic__vec_getp(p, header->len - 1);
 	header->len -= 1;
 
 	return item;

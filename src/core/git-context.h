@@ -2,6 +2,7 @@
 #define CORE_GIT_CONTEXT_H_
 
 #include <lib/include.h>
+#include <core/utils/include.h>
 
 #define GIT_OBJECTS_DIR 	"objects/"
 #define GIT_REFS_DIR  		"refs/"
@@ -20,50 +21,53 @@ typedef struct {
 
 typedef struct {
 	GitContextPaths paths;
+	char *workdir;
 } GitContext;
 
 GitContext *git_context_init(char *root, StringBuilder *sb);
 
 #ifdef CORE_GIT_CONTEXT_IMPLEMENTATION_
 
-// @note root must be passed without / at the end (example: mygit and not mygit/)
 GitContextPaths git_context_paths_init(char *root, StringBuilder *sb) {
 	GitContextPaths paths = {0};
 
+	char *nroot = git_path_normalize(root, sb); 
+
 	sb_clear(sb);
-	sb_push_cstr(sb, root);
+	sb_push_cstr(sb, nroot);
 	paths.root = sb_collect(sb);
 
 	sb_clear(sb);
-	sb_push_cstr(sb, root);
+	sb_push_cstr(sb, nroot);
 	sb_push_char(sb, '/');
 	sb_push_cstr(sb, GIT_OBJECTS_DIR);
 	paths.objects = sb_collect(sb);
 
 	sb_clear(sb);
-	sb_push_cstr(sb, root);
+	sb_push_cstr(sb, nroot);
 	sb_push_char(sb, '/');
 	sb_push_cstr(sb, GIT_REFS_DIR);
 	paths.refs = sb_collect(sb);
 
 	sb_clear(sb);
-	sb_push_cstr(sb, root);
+	sb_push_cstr(sb, nroot);
 	sb_push_char(sb, '/');
 	sb_push_cstr(sb, GIT_REFS_HEADS_DIR);
 	paths.refs_heads = sb_collect(sb);
 
 	sb_clear(sb);
-	sb_push_cstr(sb, root);
+	sb_push_cstr(sb, nroot);
 	sb_push_char(sb, '/');
 	sb_push_cstr(sb, GIT_INDEX_FILE);
 	paths.index = sb_collect(sb);
 
 	sb_clear(sb);
-	sb_push_cstr(sb, root);
+	sb_push_cstr(sb, nroot);
 	sb_push_char(sb, '/');
 	sb_push_cstr(sb, GIT_HEAD_FILE);
 	paths.head = sb_collect(sb);
 
+	free(nroot);
 	return paths;
 }
 
@@ -85,11 +89,16 @@ GitContext *git_context_init(char *root, StringBuilder *sb) {
 
 	context->paths = git_context_paths_init(root, sb);
 
+	// FIX: traverse the parent dirs until you find a root dir
+	// hardcode the workdir to = "."
+	context->workdir = git_path_normalize(".", sb);
+
 	return context;
 }
 
 void git_context_free(GitContext *context) {
 	git_context_paths_free(context->paths);
+	free(context->workdir);
 	free(context);
 } 
 

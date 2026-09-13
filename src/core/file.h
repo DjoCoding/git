@@ -4,19 +4,19 @@
 #include <lib/include.h>
 
 typedef struct {
-	u32   mode;
+	u32   git_mode;
 	char *path;			// owned
 	char  blob_hash_text[HASH_TEXT_SIZE];
 } FileEntry;
 
 #define Self    FileEntry
 
-Self file_entry_init(u32 mode, char *path, char blob_hash_text[HASH_TEXT_SIZE]);
+Self file_entry_init(u32 git_mode, char *path, char blob_hash_text[HASH_TEXT_SIZE]);
 void file_entry_free(Self self);
 
 #ifdef CORE_FILE_IMPLEMENTATION_
 
-Self file_entry_init(u32 mode, char *path, char blob_hash_text[HASH_TEXT_SIZE]) {
+Self file_entry_init(u32 git_mode, char *path, char blob_hash_text[HASH_TEXT_SIZE]) {
 	Self self = {0};
 
 	usize path_len = strlen(path);
@@ -30,7 +30,7 @@ Self file_entry_init(u32 mode, char *path, char blob_hash_text[HASH_TEXT_SIZE]) 
 	memcpy(self.path, path, path_len);
 	self.path[path_len] = 0;
 
-	self.mode = mode;
+	self.git_mode = git_mode;
 
 	memcpy(self.blob_hash_text, blob_hash_text, HASH_TEXT_SIZE);
 	

@@ -50,7 +50,7 @@ typedef enum {
 typedef struct {
     bool  exists;
     FileType type;
-    char *path;
+    char  *path;
     usize size;
     u32   mode;
     u64   ctime;

@@ -15,68 +15,62 @@ Result commit_staged(Index *index, char *message, GitContext *git_context, Strin
 #include <core/objects/include.h>
 #include <core/actions/write-tree.h>
 #include <core/head.h>
-#include <tools/include.h>
+#include <utils/include.h>
 
 #include <assert.h>
 
 // @description get tree out of index entries who's directory is <dir_path>
 // @return Result<char *> (tree hash bytes)
 Result treeify_dir(Index *index, char *dir_path, char *objects_dir_path, StringBuilder *sb, SMap(bool) visited_sub_dirs) {
-	StringView dir_path_sv = sv_from_cstr(dir_path);
-
 	Tree *tree = tree_new();
 
-	// get all the entries who's path start with dir_path
 	vec_foreach(index->entries, _, pentry, {
-		StringView entry_file_path = sv_from_cstr(pentry->file_path);
-		if(!sv_starts_with(entry_file_path, dir_path_sv)) continue;
-
-		StringView entry_file_relative_path = sv_slice(entry_file_path, dir_path_sv.len, entry_file_path.len);
-		StringView entry_file_relative_path_dir = sv_until(entry_file_relative_path, '/');
-
-		// if dir == file, in the case of "<file>" with no "/" in the path
-		// then the file is a direct child of the dir
-		bool is_direct_child = sv_eq(entry_file_relative_path_dir, entry_file_relative_path);
-		if(is_direct_child) {
+		if(!file_child_of(pentry->file_path, dir_path)) continue;
+		
+		if(file_dchild_of(pentry->file_path, dir_path)) {
 			// now collect the child inside the tree
-			TreeEntry tree_entry = tree_entry_init(pentry->mode, pentry->file_path, pentry->blob_hash);
+			TreeEntry tree_entry = tree_entry_init(pentry->git_mode, pentry->file_path, pentry->blob_hash);
 			vec_pushs(tree->entries, tree_entry);
 			continue;
 		}
 
+		StringView sv = sv_from_cstr(pentry->file_path);
+		StringView rel_path = sv_slice(sv, strlen(dir_path), sv.len);
+		StringView sub_dir_sv = sv_until(rel_path, '/');
+
 		// entry is not direct child of dir_path and then it must be further processed
 		sb_clear(sb);
-		sb_push_sv(sb, dir_path_sv); 					// dir_path_sv includes its "/" at the end
-		sb_push_sv(sb, entry_file_relative_path_dir);	// add the first dir down the current dir
+		sb_push_cstr(sb, dir_path); // dir path includes its "/" at the end
+		sb_push_sv(sb, sub_dir_sv);	// add the first dir down the current dir
 		sb_push_char(sb, '/');							// add "/" because the function expects it
-		char *sub_dir_path = sb_collect(sb);
+		char *sub_dir = sb_collect(sb);
 
-		if(smap_contains(visited_sub_dirs, sub_dir_path)) {
-			free(sub_dir_path);
+		if(smap_contains(visited_sub_dirs, sub_dir)) {
+			free(sub_dir);
 			continue;
 		}
 		
-		Result result = treeify_dir(index, sub_dir_path, objects_dir_path, sb, visited_sub_dirs);
+		Result result = treeify_dir(index, sub_dir, objects_dir_path, sb, visited_sub_dirs);
 		if(!result.ok) {
-			free(sub_dir_path);
+			free(sub_dir);
 			tree_free(tree);
 			return result;
 		}
 		
-		FileInfo info = file_info(sub_dir_path);
+		FileInfo info = file_info(sub_dir);
 		assert((info.exists && info.type == FILE_TYPE_DIR));
 		
 		u32 mode = git_mode_from_stat(info.mode);
 
 		char *tree_hash_bytes = (char *)result.as.data;
-		TreeEntry tree_entry = tree_entry_init(mode, sub_dir_path, (unsigned char *)tree_hash_bytes);
+		TreeEntry tree_entry = tree_entry_init(mode, sub_dir, (unsigned char *)tree_hash_bytes);
 
 		free(tree_hash_bytes);
 
 		vec_pushs(tree->entries, tree_entry);
-		smap_set(visited_sub_dirs, sub_dir_path, true); // mark it as visited
+		smap_set(visited_sub_dirs, sub_dir, true); // mark it as visited
 		
-		free(sub_dir_path);
+		free(sub_dir);
 	}); 
 
 	ObjectWriter writer = object_writer_init(objects_dir_path, sb);
@@ -90,7 +84,7 @@ Result treeify_dir(Index *index, char *dir_path, char *objects_dir_path, StringB
 Result treeify_index(Index *index, char *objects_dir_path, StringBuilder *sb) {
 	SMap(bool) visited_sub_dirs = smap_new(bool);
 
-	Result result = treeify_dir(index, "\0", objects_dir_path, sb, visited_sub_dirs);
+	Result result = treeify_dir(index, "./", objects_dir_path, sb, visited_sub_dirs);
 	if(!result.ok) {
 		smap_free(visited_sub_dirs);
 		return result;
@@ -107,35 +101,46 @@ Result commit_staged(
 	GitContext *git_context,
 	StringBuilder *sb
 ) {
+	Result result;
+
 	char *parent_commit_hash_text = NULL;
 
 	// read HEAD ref
-	Result head_file_parse_result = head_file_parse(git_context->paths.head, sb);
-	if(!head_file_parse_result.ok) return head_file_parse_result;
+	result = head_file_parse(git_context->paths.head, sb);
+	if(!result.ok) return result;
 
-	// read head ref commit hash
-	char *head_ref_path = (char *)head_file_parse_result.as.data;
+	// read parent commit hash
+	Head *head = result.as.data;
+	if(head->attached) {
+		char *ref = head->as.attached.ref;
+		
+		sb_clear(sb);
+		sb_push_cstr(sb, git_context->paths.root);
+		sb_push_char(sb, '/');
+		sb_push_cstr(sb, ref);
+		char *head_ref_git_path = sb_collect(sb);
+
+		FileInfo head_ref_file_info = file_info(head_ref_git_path);
+		if(head_ref_file_info.exists) {
+			FileReader *reader = file_reader_new_from_path(head_ref_git_path);
+			parent_commit_hash_text = file_reader_read_all_as_string(reader, sb);
+			file_reader_close(reader);
+		}
+	} else {
+		char *commit_hash_text = head->as.detached.commit_hash_text;
 	
-	sb_clear(sb);
-	sb_push_cstr(sb, git_context->paths.root);
-	sb_push_char(sb, '/');
-	sb_push_cstr(sb, head_ref_path); free(head_ref_path);
-	char *head_ref_git_path = sb_collect(sb);
-
-	FileInfo head_ref_file_info = file_info(head_ref_git_path);
-	if(head_ref_file_info.exists) {
-		FileReader *reader = file_reader_new_from_path(head_ref_git_path);
-		parent_commit_hash_text = file_reader_read_all_as_string(reader, sb);
-		file_reader_close(reader);
+		sb_clear(sb);
+		sb_push(sb, commit_hash_text, HASH_TEXT_SIZE);
+		parent_commit_hash_text = sb_collect(sb);
 	}
 
-	Result tree_result = treeify_index(index, git_context->paths.objects, sb); // must be "./" to work correctly
-	if(!tree_result.ok) {
-		free(head_ref_git_path);
-		return tree_result;
+	result = treeify_index(index, git_context->paths.objects, sb);
+	if(!result.ok) {
+		head_free(head);
+		return result;
 	}
 
-	char *tree_hash_bytes = (char *)tree_result.as.data;
+	char *tree_hash_bytes = (char *)result.as.data;
 	char *tree_hash_text = hash_to_text((unsigned char *)tree_hash_bytes, sb); free(tree_hash_bytes);
 
 	// if there a parent commit, check if the commit tree hash is same
@@ -145,10 +150,10 @@ Result commit_staged(
 		free(parent_commit_hash_text);
 
 		// get parent commit
-		Result result = commit_load_from_file(parent_commit_path, sb); free(parent_commit_path);
+		result = commit_load_from_file(parent_commit_path, sb); free(parent_commit_path);
 		if(!result.ok) {
-			free(head_ref_git_path);
 			free(tree_hash_text);
+			head_free(head);
 			return result; 
 		}
 
@@ -156,8 +161,9 @@ Result commit_staged(
 
 		// compare the hashes
 		if(memcmp(parent_commit->tree, tree_hash_text, HASH_TEXT_SIZE) == 0) {
-			// if same hash, no need to write a new commit
-			return result_ok(parent_commit);
+			// same commit tree do nothing
+			head_free(head);
+			return result_error("cannot commit changes since no change is made");
 		}
 
 		// if not same hash let the rest handle the commit
@@ -167,23 +173,36 @@ Result commit_staged(
 	free(tree_hash_text);
 
 	ObjectWriter object_writer = object_writer_init(git_context->paths.objects, sb);
-	Result result = object_writer_write_commit(object_writer, commit);
+	result = object_writer_write_commit(object_writer, commit);
 	if(!result.ok) {
-		free(head_ref_git_path);
+		head_free(head);
 		commit_free(commit);
 		return result;
 	}
 
 	char *commit_hash_bytes = (char *)result.as.data;
 	char *commit_hash_text = hash_to_text((unsigned char *)commit_hash_bytes, sb); free(commit_hash_bytes);
+	
+	if(head->attached) {
+		char *ref = head->as.attached.ref;
+		
+		sb_clear(sb);
+		sb_push_cstr(sb, git_context->paths.root);
+		sb_push_char(sb, '/');
+		sb_push_cstr(sb, ref);
+		char *head_ref_git_path = sb_collect(sb);
+		
+		FileWriter *head_writer = file_writer_new_from_path(head_ref_git_path);
+		file_writer_write(head_writer, commit_hash_text, HASH_TEXT_SIZE);
+		file_writer_close(head_writer);
+	} else {
+		FileWriter *head_writer = file_writer_new_from_path(git_context->paths.head);
+		file_writer_write(head_writer, commit_hash_text, HASH_TEXT_SIZE);
+		file_writer_close(head_writer);
+	}
 
-	FileWriter *head_writer = file_writer_new_from_path(head_ref_git_path);
-	file_writer_write(head_writer, commit_hash_text, HASH_TEXT_SIZE);
-	file_writer_close(head_writer);
-
+	head_free(head);
 	free(commit_hash_text);
-	free(head_ref_git_path);
-
 	return result_ok(commit);
 }
 

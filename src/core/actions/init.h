@@ -20,11 +20,12 @@ Result init(GitContext *git_context, StringBuilder *sb) {
 	}
 
     if(!root_info.exists) {
-		re_initializing = true;
 		if(mkdir(git_context->paths.root, 0755) == -1) {
 			return result_error("cannot create root directory");
 		}
-    }
+    } else {
+		re_initializing = true;
+	}
 
     FileInfo objects_info = file_info(git_context->paths.objects);
 
@@ -33,11 +34,12 @@ Result init(GitContext *git_context, StringBuilder *sb) {
     }
 
     if(!objects_info.exists) {
-		re_initializing = true;
 		if(mkdir(git_context->paths.objects, 0755) == -1) {
 			return result_error("cannot create "GIT_OBJECTS_DIR" directory");
 		}
-    }
+    } else {
+		re_initializing = true;
+	}
 
     FileInfo refs_info = file_info(git_context->paths.refs);
 
@@ -46,11 +48,12 @@ Result init(GitContext *git_context, StringBuilder *sb) {
     }
 
     if(!refs_info.exists) {
-		re_initializing = true;
 		if(mkdir(git_context->paths.refs, 0755) == -1) {
 			return result_error("cannot create "GIT_REFS_DIR" directory");
 		}
-    }
+    } else {
+		re_initializing = true;
+	}
 
     FileInfo refs_heads_info = file_info(git_context->paths.refs_heads);
     if(refs_heads_info.exists && refs_heads_info.type != FILE_TYPE_DIR) {
@@ -58,11 +61,12 @@ Result init(GitContext *git_context, StringBuilder *sb) {
     }
 
     if(!refs_heads_info.exists) {
-		re_initializing = true;
 		if(mkdir(git_context->paths.refs_heads, 0755) == -1) {
 			return result_error("cannot create "GIT_REFS_HEADS_DIR" directory");
 		}
-    }
+    } else {
+		re_initializing = true;
+	}
 
     FileInfo head_info = file_info(git_context->paths.head);
     if(!head_info.exists) {
@@ -76,7 +80,7 @@ Result init(GitContext *git_context, StringBuilder *sb) {
     } else {
 		re_initializing = true;
 	}
-
+	
 	if(head_info.exists && head_info.type != FILE_TYPE_REGULAR) {
 		return result_error("cannot re-initialize repository since it is corrupted");
 	}

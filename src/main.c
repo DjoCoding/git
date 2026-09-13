@@ -11,8 +11,8 @@
 #define LIB_IMPLEMENTATION
 #include <lib/include.h>
 
-#define TOOLS_IMPLEMENTATION
-#include <tools/include.h>
+#define UTILS_IMPLEMENTATION
+#include <utils/include.h>
 
 #define CORE_IMPLEMENTATION
 #include <core/include.h>
@@ -90,10 +90,12 @@ void assert_git_is_initialized(GitContext *git_context) {
     Result result = head_file_parse(head_info.path, sb);
     if(!result.ok) {
         sb_free(sb);
-
         fprintf(stderr, "ERROR: not proper git repository, must delete \"%s\" directory and re-initialize again\n", git_context->paths.root);
         exit(1);
     }
+
+    Head *head = result.as.data;
+    head_free(head);
 
     sb_free(sb);
 }
@@ -127,11 +129,6 @@ int hash_file_command(HashFileCommandContext context) {
     }
 
     char *hash_bytes = result.as.data;
-    if(hash_bytes == NULL) {
-        fprintf(stderr, "WARNING: empty file \"%s\" ignored\n", context.file_path);
-        return 0;
-    }
-
     char *hash_text = hash_to_text((unsigned char *)hash_bytes, context.sb);
 
     fprintf(stdout, "%s\n", hash_text);
@@ -212,16 +209,16 @@ int ls_tree_command(LsTreeCommandContext context) {
             continue;
         }
 
-        char *hash = hash_to_text(pentry->hash, context.sb);
+        char *hash_text = hash_to_text(pentry->hash, context.sb);
 
         if(options.object_only) {
-            fprintf(stdout, "%s\n", hash);
-            free(hash);
+            fprintf(stdout, "%s\n", hash_text);
+            free(hash_text);
             continue;
         }
 
-        fprintf(stdout, "%u %s %s\n", pentry->mode, pentry->file_name, hash);
-        free(hash);
+        fprintf(stdout, "%u %s %s\n", pentry->git_mode, pentry->file_name, hash_text);
+        free(hash_text);
     });
 
     tree_free(tree);
@@ -360,7 +357,7 @@ int add_command(AddCommandContext context) {
 	vec_foreach(context.paths, _, ppath, {
 		char *path = *ppath;
 		
-		Result result = add_file(index, path, context.git_context->paths.objects, context.sb);
+		Result result = add_file(index, path, context.git_context, context.sb);
 		if(result.ok) continue;
 
         success = false;
@@ -490,7 +487,7 @@ int checkout_command(CheckoutCommandContext context) {
     assert(context.git_context != NULL);
     assert(context.sb != NULL);
 
-    Result result = {0};
+    Result result;
     
     result = index_load_from_file(context.git_context->paths.index, context.sb);
     if(!result.ok) {
@@ -501,7 +498,27 @@ int checkout_command(CheckoutCommandContext context) {
 
     Index *index = (Index *)result.as.data;
 
-    result = checkout(index, context.commit_hash_text, context.git_context, context.sb);
+
+    result = workdir_load(context.git_context, context.sb);
+    if(!result.ok) {
+        const char *error = result.as.error;
+        fprintf(stderr, "ERROR: %s\n", error);
+        return 1;
+    }
+
+    WorkDir *workdir = (WorkDir *)result.as.data;
+
+    // fprintf(stdout, "DEBUG: workdir files\n");
+    // vec_foreach(workdir->files, _, pfile, {
+    //     fprintf(stdout, "DEBUG: file \"%s\"\n", pfile->path);
+    // });
+
+    // fprintf(stdout, "DEBUG: index files\n");
+    // vec_foreach(index->entries, _, pentry, {
+    //     fprintf(stdout, "DEBUG: file \"%s\"\n", pentry->file_path);
+    // });
+
+    result = checkout_commit(workdir, index, context.commit_hash_text, context.git_context, context.sb);
     if(!result.ok) {
         const char *error = result.as.error;
         fprintf(stderr, "ERROR: %s\n", error);
@@ -509,10 +526,13 @@ int checkout_command(CheckoutCommandContext context) {
     }
 
     index_free(index);
+    workdir_free(workdir);
+    
     return 0;
 }
 
 char *GIT_DIR = "mygit";
+
 
 int main(int argc, char *argv[]) {
     int code = 0;

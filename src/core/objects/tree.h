@@ -5,7 +5,7 @@
 #include <lib/include.h>
 
 typedef struct {
-	u32   mode;
+	u32   git_mode;
 	char *file_name;  // owned
 	unsigned char hash[HASH_BYTES_SIZE];
 } TreeEntry;
@@ -33,7 +33,7 @@ Result tree_load_from_file(char *file_path, StringBuilder *sb);
 // @return Result<NULL>
 Result tree_write_to_file(Self *self, char *file_path, StringBuilder *sb);
 
-TreeEntry tree_entry_init(u32 mode, char *file_name, unsigned char hash[HASH_BYTES_SIZE]);
+TreeEntry tree_entry_init(u32 git_mode, char *file_name, unsigned char hash[HASH_BYTES_SIZE]);
 
 // @description performs a - b
 int tree_entry_compare(TreeEntry a, TreeEntry b);
@@ -63,12 +63,12 @@ Self *tree_new() {
 	return self;
 }
 
-TreeEntry tree_entry_init(u32 mode, char *file_name, unsigned char hash[HASH_BYTES_SIZE]) {
+TreeEntry tree_entry_init(u32 git_mode, char *file_name, unsigned char hash[HASH_BYTES_SIZE]) {
 	assert(file_name != NULL);
 
 	TreeEntry entry = {0};
 
-	entry.mode = mode;
+	entry.git_mode = git_mode;
 
 	usize len = strlen(file_name);
 	entry.file_name = (char *)malloc(len + 1);
@@ -218,7 +218,7 @@ Result tree_parse(StringView tree_content) {
 }
 
 void tree_entry_format(TreeEntry e, StringBuilder *sb) {
-	sb_pushf(sb, "%06o", e.mode);
+	sb_pushf(sb, "%06o", e.git_mode);
 	sb_push_char(sb, ' ');
 
 	sb_push_cstr(sb, e.file_name);

@@ -64,13 +64,11 @@ char *git_path_normalize(char *path, StringBuilder *sb) {
 
 	sb_clear(sb);
 	sb_push_cstr(sb, "./");
-	
-	if(vec_len(parts) != 0) {
-		vec_foreach(parts, _, ppart, {
-			sb_push_sv(sb, *ppart);
-			sb_push_char(sb, '/');
-		}); 
-	}
+
+	vec_foreach(parts, _, ppart, {
+		sb_push_sv(sb, *ppart);
+		sb_push_char(sb, '/');
+	}); 
 	
 	sb->len -= 1;		// remove last added /
 	return sb_collect(sb);

@@ -12,5 +12,3 @@ demo: git
 	cp ./git demo
 	rm ./git
 	cd demo && ./git init
-	cd demo && ./git add .
-	cd demo && ./git commit -m "sdnfnslfnfns"
